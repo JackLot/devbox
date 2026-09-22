@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Laptop-side control for the EC2 devbox (macOS).
+#
+#   devbox up        start or resume, wait until running
+#   devbox down      hibernate (keeps RAM: agents, tmux, dev servers resume)
+#   devbox stop      full stop, RAM discarded (needed before changing instance type)
+#   devbox status    instance id, state and type
+#   devbox ssm       admin shell over SSM (sudo-capable ssm-user)
+#   devbox proxy H P SSH ProxyCommand: wake the box, wait for sshd, then connect
+#
+# Finds the instance by its Name tag. Uses the normal AWS CLI credential chain,
+# so set AWS_PROFILE if the devbox lives in a non-default profile.
+set -euo pipefail
+
+NAME=${DEVBOX_NAME:-devbox}
+SSH_WAIT_SECONDS=${DEVBOX_SSH_WAIT_SECONDS:-180}
+
+# stdout is the SSH byte stream in proxy mode, so all messages go to stderr
+log() { echo "devbox: $*" >&2; }
+die() { log "$*"; exit 1; }
+
+instance_id() {
+  local ids
+  ids=$(aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=$NAME" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+    --query 'Reservations[].Instances[].InstanceId' --output text)
+  read -r -a ids_arr <<<"$ids"
+  (( ${#ids_arr[@]} == 1 )) \
+    || die "expected exactly 1 instance tagged Name=$NAME, found ${#ids_arr[@]}"
+  echo "${ids_arr[0]}"
+}
+
+state() {
+  aws ec2 describe-instances --instance-ids "$1" \
+    --query 'Reservations[0].Instances[0].State.Name' --output text
+}
+
+up() {
+  local id s
+  id=$(instance_id)
+  s=$(state "$id")
+  case $s in
+    running) return 0 ;;
+    pending) ;;
+    stopping|stopped)
+      if [[ $s == stopping ]]; then
+        log "waiting for $id to finish stopping"
+        aws ec2 wait instance-stopped --instance-ids "$id"
+      fi
+      log "starting $id"
+      aws ec2 start-instances --instance-ids "$id" >/dev/null
+      ;;
+    *) die "unexpected state: $s" ;;
+  esac
+  aws ec2 wait instance-running --instance-ids "$id"
+  log "$id is running"
+}
+
+wait_for_port() {
+  local host=$1 port=$2 deadline=$((SECONDS + SSH_WAIT_SECONDS))
+  log "waiting for $host:$port"
+  until nc -z -G 3 "$host" "$port" 2>/dev/null; do
+    (( SECONDS < deadline )) || die "$host:$port not reachable after ${SSH_WAIT_SECONDS}s"
+    sleep 2
+  done
+}
+
+case ${1:-} in
+  up) up ;;
+  down)
+    id=$(instance_id)
+    aws ec2 stop-instances --hibernate --instance-ids "$id" >/dev/null
+    log "hibernating $id"
+    ;;
+  stop)
+    id=$(instance_id)
+    aws ec2 stop-instances --instance-ids "$id" >/dev/null
+    log "stopping $id (RAM discarded)"
+    ;;
+  status)
+    id=$(instance_id)
+    aws ec2 describe-instances --instance-ids "$id" \
+      --query 'Reservations[0].Instances[0].[InstanceId,State.Name,InstanceType]' --output text
+    ;;
+  ssm)
+    exec aws ssm start-session --target "$(instance_id)"
+    ;;
+  proxy)
+    (( $# == 3 )) || die "usage: devbox proxy <host> <port>"
+    host=$2 port=$3
+    # Fast path: box already up, skip the AWS API entirely
+    if ! nc -z -G 3 "$host" "$port" 2>/dev/null; then
+      up
+      wait_for_port "$host" "$port"
+    fi
+    exec nc "$host" "$port"
+    ;;
+  *)
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2
+    exit 1
+    ;;
+esac

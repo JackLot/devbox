@@ -1,0 +1,13 @@
+# Append to ~/.ssh/config. `ssh devbox` wakes a hibernated box, then connects
+# over Tailscale (MagicDNS name "devbox").
+Host devbox
+  HostName devbox
+  User dev
+  IdentityFile ~/.ssh/devbox_ed25519
+  IdentitiesOnly yes
+  AddKeysToAgent yes
+  UseKeychain yes
+  ForwardAgent no
+  ServerAliveInterval 30
+  ServerAliveCountMax 3
+  ProxyCommand ~/dev/devbox/ec2/laptop/devbox proxy %h %p
