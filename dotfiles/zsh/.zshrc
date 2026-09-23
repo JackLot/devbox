@@ -73,12 +73,12 @@ setopt PROMPT_SUBST
 PS1=$'%F{69}%n%f on %F{cyan}%~%f ${vcs_info_msg_0_}${WORKTREE_INDICATOR} 
 \Uf0da '
 
-# On the devbox (the bootstrap writes this marker): a cloud emoji first, and a pink
-# username instead of blue. Emoji render 2 columns wide; %2{...%} tells zsh so.
+# On the devbox (the bootstrap writes this marker): prefix "ec2|" and show it and
+# the username in magenta instead of blue, so the machine is obvious at a glance.
 if [[ -e /var/lib/devbox/bootstrapped ]]; then
-  laptop_user_color='%F{69}' devbox_user_color='%F{212}'
-  PS1=$'%2{\u2601\ufe0f%} '"${PS1/$laptop_user_color/$devbox_user_color}"
-  unset laptop_user_color devbox_user_color
+  laptop_user_color='%F{69}' devbox_color='%F{magenta}'
+  PS1="${devbox_color}ec2|%f${PS1/$laptop_user_color/$devbox_color}"
+  unset laptop_user_color devbox_color
 fi
 
 # ---- Machine-specific settings and secrets (untracked) -------------------------
