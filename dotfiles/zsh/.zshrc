@@ -73,11 +73,11 @@ setopt PROMPT_SUBST
 PS1=$'%F{69}%n%f on %F{cyan}%~%f ${vcs_info_msg_0_}${WORKTREE_INDICATOR} 
 \Uf0da '
 
-# On the devbox (the bootstrap writes this marker): a cloud icon first, and a pink
-# username instead of blue. Material Design cloud: sized like the branch icon.
+# On the devbox (the bootstrap writes this marker): a cloud emoji first, and a pink
+# username instead of blue. Emoji render 2 columns wide; %2{...%} tells zsh so.
 if [[ -e /var/lib/devbox/bootstrapped ]]; then
   laptop_user_color='%F{69}' devbox_user_color='%F{212}'
-  PS1=$'%F{117}\U000F015F%f '"${PS1/$laptop_user_color/$devbox_user_color}"
+  PS1=$'%2{\u2601\ufe0f%} '"${PS1/$laptop_user_color/$devbox_user_color}"
   unset laptop_user_color devbox_user_color
 fi
 
