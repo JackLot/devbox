@@ -73,12 +73,12 @@ setopt PROMPT_SUBST
 PS1=$'%F{69}%n%f on %F{cyan}%~%f ${vcs_info_msg_0_}${WORKTREE_INDICATOR} 
 \Uf0da '
 
-# On the devbox (the bootstrap writes this marker): prefix "ec2|" and show it and
-# the username in pink (212) instead of blue, so the machine is obvious at a glance.
+# On the devbox (the bootstrap writes this marker): a cloud icon first, and a pink
+# username instead of blue. Material Design cloud: sized like the branch icon.
 if [[ -e /var/lib/devbox/bootstrapped ]]; then
-  laptop_user_color='%F{69}' devbox_color='%F{212}'
-  PS1="${devbox_color}ec2|%f${PS1/$laptop_user_color/$devbox_color}"
-  unset laptop_user_color devbox_color
+  laptop_user_color='%F{69}' devbox_user_color='%F{212}'
+  PS1=$'%F{117}\U000F015F%f '"${PS1/$laptop_user_color/$devbox_user_color}"
+  unset laptop_user_color devbox_user_color
 fi
 
 # ---- Machine-specific settings and secrets (untracked) -------------------------
