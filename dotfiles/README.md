@@ -18,7 +18,7 @@ must be pushed first). On an existing devbox: `cd ~/devbox && git pull && dotfil
 | `zsh/.zshrc` | `~/.zshrc` | Prompt (git branch + worktree indicator, Nerd Font icons), aliases, history, fnm, mise |
 | `tmux/.tmux.conf` | `~/.tmux.conf` | Prefix `C-Space`, `\|`/`-` splits, Catppuccin mocha via TPM, truecolor, OSC 52 clipboard |
 | `nvim/` | `~/.config/nvim` | kickstart.nvim (MIT, see `nvim/LICENSE.md`) with local changes; `nvim-pack-lock.json` pins plugins |
-| `mise/global.toml` | `~/.config/mise/config.toml` | Exact version pins: neovim, ripgrep, fd, fzf, tree-sitter (Amazon's linux distro, AL2023, packages none of these). Since versions are pinned, update this mise file and reinstall, see comments in the config |
+| `mise/global.toml` | `~/.config/mise/config.toml` | Exact version pins: neovim, ripgrep, fd, fzf, tree-sitter (Amazon's linux distro, AL2023, packages none of these). tree-sitter is macOS-only: its Linux arm64 builds need a newer glibc than AL2023, so on the devbox nvim uses existing/bundled parsers and skips compiling new ones. Since versions are pinned, update this mise file and reinstall, see comments in the config |
 
 `install.sh` moves anything already in the way to `~/.dotfiles-backup/<timestamp>/`.
 
