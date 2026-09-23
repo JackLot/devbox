@@ -14,6 +14,7 @@ TAILSCALE_HOSTNAME=devbox
 TAILSCALE_AUTHKEY_PARAM=/devbox/tailscale-authkey
 RUNTIME_SWAP_MB=2048                           # disk swap behind zram; ~RAM size
 DEFAULT_IDLE_MINUTES=30                        # override in /etc/devbox/idle.conf
+DOTFILES_REPO=https://github.com/JackLot/devbox.git   # public; dotfiles/ linked for dev
 
 
 
@@ -56,7 +57,7 @@ log "Updating packages"
 dnf -y --releasever=latest upgrade
 # GitHub CLI from GitHub's own repo (also kept current by the daily update)
 curl -fsSL https://cli.github.com/packages/rpm/gh-cli.repo -o /etc/yum.repos.d/gh-cli.repo
-dnf -y install git gh tmux unzip nftables zram-generator smart-restart
+dnf -y install git gh tmux zsh gcc make unzip nftables zram-generator smart-restart
 # Libraries Playwright's Chromium needs (`npx playwright install-deps` is apt-only)
 dnf -y install atk at-spi2-atk at-spi2-core cups-libs libxcb libxkbcommon libX11 \
   libXext libXcomposite libXdamage libXfixes libXrandr alsa-lib mesa-libgbm cairo pango
@@ -92,8 +93,8 @@ EOF
 
 log "Creating user $DEV_USER"
 
-# For zsh: install it, then change /bin/bash to /bin/zsh here.
-id "$DEV_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$DEV_USER"
+id "$DEV_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/zsh "$DEV_USER"
+usermod --shell /bin/zsh "$DEV_USER"   # also switches users created before zsh
 dev_home=$(getent passwd "$DEV_USER" | cut -d: -f6)
 
 # 700: only the user can enter ~/.ssh
@@ -125,6 +126,7 @@ AllowAgentForwarding no
 X11Forwarding no
 ClientAliveInterval 60
 ClientAliveCountMax 3
+KexAlgorithms mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256
 EOF
 
 # Validate, reload, then confirm the drop-in actually took effect.
@@ -135,6 +137,7 @@ systemctl reload sshd
 sshd_effective=$(sshd -T)
 grep -qx "allowusers $DEV_USER" <<<"$sshd_effective" || { echo "sshd drop-in not applied"; exit 1; }
 grep -qx "passwordauthentication no" <<<"$sshd_effective" || { echo "sshd password auth still on"; exit 1; }
+grep -q "^kexalgorithms mlkem768x25519-sha256" <<<"$sshd_effective" || warn "sshd post-quantum kex not active"
 
 
 
@@ -226,22 +229,22 @@ systemctl enable --now tailscaled
 
 if tailscale status >/dev/null 2>&1; then
   log "Tailscale already connected"
+  tailscale set --accept-dns=false
 
 # Otherwise join with the single-use auth key from SSM Parameter Store
 elif authkey=$(aws ssm get-parameter --region "$REGION" --name "$TAILSCALE_AUTHKEY_PARAM" \
     --with-decryption --query Parameter.Value --output text 2>/dev/null); then
-  # Key goes through a temp file so it never shows in the process list.
-  # If this fails, join manually over SSM.
   log "Joining tailnet as $TAILSCALE_HOSTNAME"
   keyfile=$(mktemp /run/devbox-tskey.XXXXXX)
   printf '%s' "$authkey" > "$keyfile"
   unset authkey
-  # Non-fatal: SSM still works, so a bad key shouldn't skip the rest of setup.
-  tailscale up --auth-key="file:$keyfile" --hostname="$TAILSCALE_HOSTNAME" \
-    || warn "tailscale up failed (bad or expired key?); fix $TAILSCALE_AUTHKEY_PARAM and re-run this script over SSM"
+  # Key via temp file (never in ps). Non-fatal: SSM still works.
+  # --accept-dns=false: MagicDNS as the box's resolver broke public lookups.
+  tailscale up --auth-key="file:$keyfile" --hostname="$TAILSCALE_HOSTNAME" --accept-dns=false \
+    || warn "tailscale up failed (bad/expired key?); fix $TAILSCALE_AUTHKEY_PARAM, re-run over SSM"
   rm -f "$keyfile"
 else
-  warn "could not read $TAILSCALE_AUTHKEY_PARAM; join manually over SSM: sudo tailscale up --hostname=$TAILSCALE_HOSTNAME"
+  warn "can't read $TAILSCALE_AUTHKEY_PARAM; join over SSM: sudo tailscale up --accept-dns=false"
 fi
 
 
@@ -398,27 +401,11 @@ chmod 644 /etc/claude-code/managed-settings.d/50-devbox-heartbeat.json
 
 
 # ---- DEV TOOLING (AS THE DEV USER) -----------------------------------------
-# Installs fnm, Node LTS and Claude Code for the dev user (tmux comes from dnf above).
+# fnm, Node LTS and Claude Code for dev; their PATH setup is in the dotfiles .zshrc.
 
 log "Installing fnm, Node LTS and Claude Code for $DEV_USER"
-bashrc="$dev_home/.bashrc"
-if ! grep -q '>>> devbox >>>' "$bashrc"; then
-  cat >> "$bashrc" <<'EOF'
-
-# >>> devbox >>>
-export PATH="$HOME/.local/bin:$PATH"
-FNM_PATH="$HOME/.local/share/fnm"
-if [ -d "$FNM_PATH" ]; then
-  export PATH="$FNM_PATH:$PATH"
-  eval "$(fnm env --use-on-cd --shell bash)"
-fi
-# <<< devbox <<<
-EOF
-  chown "$DEV_USER:" "$bashrc"
-fi
-
 # shellcheck disable=SC2016  # expands in the dev user's shell, not here
-runuser -l "$DEV_USER" -c '
+runuser -l "$DEV_USER" -s /bin/bash -c '
   set -euo pipefail
 
   if [ ! -x "$HOME/.local/share/fnm/fnm" ]; then
@@ -443,6 +430,15 @@ systemctl enable --now devbox-firewall.service
 nft list table inet devbox >/dev/null
 systemctl start systemd-zram-setup@zram0.service
 systemctl enable --now devbox-update.timer devbox-idle.timer
+
+# ---- DOTFILES (AS THE DEV USER) ---------------------------------------------
+# zsh/tmux/nvim config shared with the laptop. Non-fatal: the box works without it.
+log "Installing dotfiles for $DEV_USER"
+tmux_local="$dev_home/.tmux.local.conf"   # devbox prefix C-a: no clash with the laptop's C-Space
+[[ -f $tmux_local ]] || { printf 'set -g prefix C-a\nbind a send-prefix\n' > "$tmux_local"; chown "$DEV_USER:" "$tmux_local"; }
+runuser -l "$DEV_USER" -s /bin/bash -c \
+  "{ [ -d ~/devbox ] || git clone $DOTFILES_REPO ~/devbox; } && ~/devbox/dotfiles/install.sh" \
+  || warn "dotfiles install failed; re-run as $DEV_USER: ~/devbox/dotfiles/install.sh"
 
 # Bootstrap timestamp, for debugging
 install -d /var/lib/devbox

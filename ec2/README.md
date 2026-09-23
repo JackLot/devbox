@@ -60,5 +60,5 @@ On the instance, the bootstrap installs:
 
 - A single tool call that runs longer than the idle window with low CPU (a slow download) can be hibernated mid-flight. It resumes on wake; raise `IDLE_MINUTES` if it bites.
 - A forgotten browser tab does not keep the box awake (by design). Waking it for the browser alone: `devbox up`.
-- EC2 user-data is capped at 16 KB. `bootstrap.sh` is about 14.9 KB, so keep comments concise; gzip it (cloud-init accepts gzipped user-data) if it outgrows that.
+- EC2 user-data is capped at 16 KB. `bootstrap.sh` is about 15.9 KB, so keep comments concise; gzip it (cloud-init accepts gzipped user-data) if it outgrows that.
 - The laptop helper assumes exactly one non-terminated instance tagged `Name=devbox`.

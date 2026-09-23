@@ -1,0 +1,10 @@
+# Global mise tools, shared by the laptop and the devbox (symlinked to
+# ~/.config/mise/config.toml). Exact pins keep both machines identical; bump
+# deliberately, then run `mise install` on each.
+# Machine-only tools go in ~/.config/mise/conf.d/local.toml (untracked).
+[tools]
+neovim = "0.12.5"
+ripgrep = "15.2.0"
+fd = "10.5.0"
+fzf = "0.74.4"
+tree-sitter = "0.26.11"

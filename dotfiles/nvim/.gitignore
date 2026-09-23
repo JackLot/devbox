@@ -1,0 +1,11 @@
+tags
+test.sh
+.luarc.json
+nvim
+
+spell/
+
+# nvim-pack-lock.json is tracked on purpose (see :help vim.pack-lockfile), so the
+# laptop and the devbox install identical plugin versions.
+
+.DS_Store

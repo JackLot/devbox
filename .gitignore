@@ -1,1 +1,7 @@
 .DS_Store
+
+# Machine-specific dotfiles live in $HOME, never in this public repo.
+# (Belt and braces in case one gets copied in by mistake.)
+.zshrc.local
+.tmux.local.conf
+conf.d/

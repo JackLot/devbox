@@ -379,6 +379,7 @@ Each check below says what `journalctl -t devbox-idle` should show.
 - [ ] `swapon --show`: `zram0` priority 100 and `/swapfile` priority 10. `/swap` is **not** listed (hibinit only enables it while hibernating).
 - [ ] `sudo nft list table inet devbox` prints the ruleset.
 - [ ] `systemctl list-timers 'devbox-*'` lists `devbox-idle.timer` and `devbox-update.timer`.
+- [ ] Dotfiles applied (devbox): the prompt matches the laptop's (git branch icon, worktree tag), `echo $SHELL` is `/bin/zsh`, `tmux` shows the Catppuccin bar with prefix `C-a`, and `nvim` opens with your plugins (language servers finish installing on first open). DNS works: `getent hosts github.com` resolves.
 - [ ] Headless browser works (devbox, as `dev`):
   ```bash
   mkdir -p ~/pwtest && cd ~/pwtest && npm init -y >/dev/null && npm install playwright && npx playwright install chromium
