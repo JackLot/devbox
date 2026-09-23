@@ -11,6 +11,7 @@ Shell variables used throughout (laptop):
 
 ```bash
 export AWS_REGION=us-east-1          # pick your region
+export AWS_PROFILE=admin             # sections 2-9; section 9 makes "devbox" the default
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ```
 
@@ -20,7 +21,8 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 - [ ] AWS CLI v2: `brew install awscli`
 - [ ] Session Manager plugin: `brew install --cask session-manager-plugin`
-- [ ] Tailscale app installed and signed in; **MagicDNS enabled** (admin console > DNS)
+- [ ] Tailscale macOS app: `brew install --cask tailscale-app`, open it, sign in from the menu bar icon (this creates your tailnet if you don't have one), and approve the VPN prompt.
+- [ ] **MagicDNS enabled** in the web admin console (login.tailscale.com/admin/dns; on by default for new tailnets). It makes `devbox` resolve as a hostname from your laptop.
 - [ ] A dedicated SSH key with a passphrase, stored in the macOS keychain:
   ```bash
   ssh-keygen -t ed25519 -f ~/.ssh/devbox_ed25519 -C devbox
@@ -29,8 +31,50 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 ## 2. AWS account hardening (one-time)
 
-- [ ] Root user has MFA and **no access keys**. Never use root day to day.
-- [ ] Day-to-day identity is an IAM Identity Center user (`aws sso login`) or an IAM user with MFA.
+Root user (console.aws.amazon.com > Root user > account name > Security credentials):
+
+- [ ] MFA assigned. Add two devices (e.g. Touch ID passkey + authenticator app) so losing one doesn't lock you out.
+- [ ] Access keys list is **empty**; delete any.
+- [ ] The email account behind root has MFA too (root password resets go through it).
+- [ ] Account (top right) > Account > **IAM user and role access to Billing information > Activate**. This is root-only, and without it your SSO sign-in can't see budgets or costs.
+- [ ] Sign out of root. Everything below uses your Identity Center sign-in.
+
+IAM Identity Center (short-lived SSO credentials instead of stored access keys):
+
+- [ ] Console > IAM Identity Center > **Enable**, in the region you picked. This wraps your account in an AWS Organization as its "management account": still one account, same ID, same resources.
+- [ ] Settings > Authentication: require MFA every sign-in. The access portal session length set here is how long `aws sso login` lasts (default 8 hours).
+- [ ] Users > **Add user** (you). If the invite didn't prompt for a password, open the user > **Reset password** > one-time password, then sign in at the access portal URL (Settings) in a private window. Set a password and register MFA.
+- [ ] Permission sets > Create > Predefined > **AdministratorAccess**. For setup work only.
+- [ ] Permission sets > Create > Custom > Inline policy: paste [`iam/laptop-policy.json`](iam/laptop-policy.json), name it **`DevboxOperator`**. For everyday use: start/stop/describe the devbox and open SSM sessions to it, nothing else. You can do this signed in through the portal as AdministratorAccess; root isn't needed.
+- [ ] AWS accounts > your account > Assign users or groups > your user > **both** permission sets.
+
+Laptop profiles (one SSO sign-in, two profiles):
+
+- [ ] Run `aws configure sso` (session name `personal`, your access portal URL, your region, AdministratorAccess, profile name `admin`), then add the `devbox` profile by hand. `~/.aws/config` should end up as:
+  ```ini
+  [sso-session personal]
+  sso_start_url = https://d-xxxxxxxxxx.awsapps.com/start
+  sso_region = us-east-1
+  sso_registration_scopes = sso:account:access
+
+  [profile admin]
+  sso_session = personal
+  sso_account_id = 123456789012
+  sso_role_name = AdministratorAccess
+  region = us-east-1
+
+  [profile devbox]
+  sso_session = personal
+  sso_account_id = 123456789012
+  sso_role_name = DevboxOperator
+  region = us-east-1
+  ```
+- [ ] Delete any old static keys: remove the `[default]` block from `~/.aws/credentials` (or the file, if that's all it has).
+- [ ] `aws sso login --sso-session personal`, then `aws sts get-caller-identity --profile admin` and `--profile devbox` both succeed (role names `AWSReservedSSO_AdministratorAccess_...` and `AWSReservedSSO_DevboxOperator_...`).
+- [ ] Keep `AWS_PROFILE=admin` only in the terminal you use for this checklist. Section 9 makes `devbox` the default everywhere else.
+
+Account defaults (admin profile):
+
 - [ ] EBS encryption on by default in this region (hibernation requires an encrypted root volume):
   ```bash
   aws ec2 enable-ebs-encryption-by-default
@@ -45,22 +89,24 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 ## 3. Tailscale
 
-- [ ] Tailnet policy (admin console > Access controls). Merge into your existing policy:
+- [ ] Tailnet policy: admin console (https://login.tailscale.com/admin) > **Access controls** > **JSON editor**. Replace the default allow-all rule (`"src": ["*"], "dst": ["*"]`), which would let the devbox reach your laptop, and keep everything else in the file (e.g. the default `"ssh"` section):
   ```jsonc
   {
     "tagOwners": {
-      "tag:devbox": ["autogroup:admin"]
+      "tag:devbox": ["autogroup:admin"],
     },
     "grants": [
-      // Your devices may reach anything on the devbox (SSH + dev server ports).
-      { "src": ["autogroup:member"], "dst": ["tag:devbox"], "ip": ["*"] }
+      // Your own devices can reach each other (replaces the default allow-all).
+      { "src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"] },
+      // Your devices can reach the devbox on any port (SSH + dev servers).
+      { "src": ["autogroup:member"], "dst": ["tag:devbox"], "ip": ["*"] },
       // Deliberately no grant with src tag:devbox: the box can't open
       // connections to your laptop or other devices.
-    ]
+    ],
   }
   ```
-  If the policy still contains the default allow-all rule (`"src": ["*"], "dst": ["*"]`), narrow it, or the devbox can reach your laptop.
-- [ ] Generate an auth key (Settings > Keys): **Reusable off, Ephemeral off, Pre-approved on, Tags `tag:devbox`, Expiration 1 day**. Tagged nodes never hit key expiry, so the box won't drop off the tailnet after 180 days.
+  Save the policy **before** generating the auth key: a key can only carry `tag:devbox` once `tagOwners` declares it.
+- [ ] Generate an auth key (Settings > Keys, https://login.tailscale.com/admin/settings/keys): **Reusable off, Ephemeral off, Pre-approved on, Tags `tag:devbox`, Expiration 1 day**. Tagged nodes never hit key expiry, so the box won't drop off the tailnet after 180 days.
 - [ ] Store it in Parameter Store without it touching shell history (laptop):
   ```bash
   read -rs TS_KEY && aws ssm put-parameter --name /devbox/tailscale-authkey \
@@ -83,9 +129,11 @@ aws iam add-role-to-instance-profile --instance-profile-name devbox-instance \
 ```
 
 - [ ] Role created. It can do exactly three things: talk to SSM, hibernate instances tagged `Name=devbox`, read `/devbox/*` parameters. **Never add more**: every process on the box, including agents, can use these credentials.
-- [ ] Optional: give the laptop a least-privilege profile for day-to-day `devbox` use with [`iam/laptop-policy.json`](iam/laptop-policy.json) (start/stop/describe the devbox and open SSM sessions to it), instead of admin credentials.
+- [ ] The laptop never gets these permissions. Its everyday access is the `DevboxOperator` permission set from section 2.
 
-## 5. Security group (no inbound)
+## 5. Security group (no inbound) and subnet
+
+A security group is a stateful firewall AWS enforces outside the OS: replies to connections the box opens (Tailscale, SSM, dnf, GitHub, model APIs) are allowed back automatically, and nothing on the internet can open a new connection in.
 
 laptop:
 ```bash
@@ -93,12 +141,29 @@ VPC_ID=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true \
   --query 'Vpcs[0].VpcId' --output text)
 SG_ID=$(aws ec2 create-security-group --group-name devbox \
   --description "devbox - no inbound" --vpc-id "$VPC_ID" \
+  --tag-specifications 'ResourceType=security-group,Tags=[{Key=Name,Value=devbox}]' \
   --query GroupId --output text)
 aws ec2 describe-security-groups --group-ids "$SG_ID" \
-  --query 'SecurityGroups[0].IpPermissions'
+  --query 'SecurityGroups[0].[IpPermissions,IpPermissionsEgress[0].IpProtocol]'
 ```
 
-- [ ] The last command prints `[]`. Outbound stays at the default allow-all (Tailscale, SSM, package repos, GitHub, model APIs all need it).
+- [ ] The last command prints `[[], "-1"]`: no inbound rules, outbound allow-all (Tailscale, SSM, package repos, GitHub, model APIs all need it). Restricting outbound adds little (exfiltration would use 443 anyway) and breaks dnf/npm/Tailscale relays in confusing ways.
+- [ ] Don't use the VPC's `default` group (it admits all traffic from other members), and **never** add an inbound rule to this one.
+
+Pin the zone. An instance (and its EBS volume) stays in the zone it launches in, and not every zone offers every type (in this account, `us-east-1e` has no t4g or m7g). Pick one that offers today's type and the ones you might resize to:
+
+```bash
+aws ec2 describe-instance-type-offerings --location-type availability-zone \
+  --filters Name=instance-type,Values=t4g.small,t4g.xlarge,m7g.xlarge \
+  --query 'InstanceTypeOfferings[].[Location,InstanceType]' --output text | sort
+AZ=us-east-1a                                   # a zone listed for all three
+SUBNET_ID=$(aws ec2 describe-subnets \
+  --filters Name=default-for-az,Values=true Name=availability-zone,Values="$AZ" \
+  --query 'Subnets[0].SubnetId' --output text)
+echo "$SUBNET_ID"
+```
+
+- [ ] `SUBNET_ID` is set (a `subnet-...` id). Section 7 launches into it.
 
 ## 6. SSH key pair
 
@@ -112,16 +177,67 @@ aws ec2 import-key-pair --key-name devbox \
 
 ## 7. Launch
 
-laptop:
+Two ways to launch the same instance: **Option A (console)** or **Option B (CLI)**. Whichever you use, these are the settings that matter:
+
+| Setting | Why |
+|---|---|
+| AMI: standard AL2023, 64-bit Arm | Standard (not minimal) AL2023 ships the hibernation agent, AWS CLI and SSM agent |
+| Hibernation enabled | **Can only be set at launch.** Without it, auto-hibernate can never work |
+| IMDSv2 required, hop limit 1 | Containers and SSRF'd dev servers can't reach instance credentials |
+| Instance metadata tags enabled | Lets bootstrap read the Name tag from IMDS (no extra IAM). Safe: hop limit 1, and Name is not a secret |
+| 40 GB gp3, encrypted | Hibernation requires encryption. 40 GB = OS + projects + 4 GB hibernation image + 2 GB swapfile |
+| Termination protection | A stray terminate can't delete the box |
+| Subnet from section 5 | Pins the zone, so the launch never lands in one without t4g |
+| Security group `devbox` | No inbound rules |
+| `Name=devbox` tag on instance and volume | The IAM policies and the laptop helper find the instance by it |
+
+Get the AMI id to compare against (laptop):
 ```bash
 AMI_ID=$(aws ssm get-parameter \
   --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 \
   --query Parameter.Value --output text)
+echo "$AMI_ID"
+```
 
+### Option A: console
+
+Console, signed in through the access portal as AdministratorAccess, region **US East (N. Virginia) us-east-1** (top right). EC2 > Instances > **Launch instances**. Only the fields listed here change; leave everything else at its default.
+
+- [ ] **Name and tags**: Name exactly `devbox` (the IAM policies, the bootstrap preflight and the laptop helper match this string; `my devbox` breaks auto-hibernate and `devbox up`). Open **Add additional tags** and make sure the Name tag's resource types include **Instances** and **Volumes** (by default it only tags the instance).
+- [ ] **Application and OS Images**: Quick Start > **Amazon Linux** > **Amazon Linux 2023 AMI** (not "minimal"), Architecture **64-bit (Arm)**. The AMI id shown under the name must equal `$AMI_ID`; if it doesn't, paste `$AMI_ID` into the AMI search box and pick that one.
+- [ ] **Instance type**: `t4g.small`.
+- [ ] **Key pair (login)**: `devbox`.
+- [ ] **Network settings > Edit**:
+  - VPC: the default VPC
+  - Subnet: the one in your section 5 zone (the id matches `$SUBNET_ID`)
+  - Auto-assign public IP: **Enable** (needed for outbound internet; the security group keeps inbound closed)
+  - Firewall: **Select existing security group > `devbox`**. The wizard defaults to *Create security group* with **SSH open to 0.0.0.0/0**. Do not launch with that.
+- [ ] **Configure storage**: `40` GiB `gp3`. Click **Advanced**, expand the volume: **Encrypted** = Encrypted (KMS key: default `aws/ebs`), **Delete on termination** = Yes.
+- [ ] **Advanced details**:
+  - IAM instance profile: `devbox-instance`
+  - Termination protection: **Enable**
+  - Stop - Hibernate behavior: **Enable** (can't be changed after launch; the console requires the encrypted root volume set above)
+  - Credit specification: **Unlimited**
+  - Metadata accessible: Enabled
+  - Metadata version: **V2 only (token required)**
+  - Metadata response hop limit: **1**
+  - Allow tags in metadata: **Enable**
+  - User data: **Choose file** > `ec2/bootstrap.sh`. Leave "User data has already been base64 encoded" unticked.
+- [ ] **Summary** panel: 1 instance, then **Launch instance**.
+- [ ] Copy the instance id (`i-...`) from the success banner, then in your terminal:
+  ```bash
+  INSTANCE_ID=i-xxxxxxxxxxxxxxxxx
+  ```
+
+### Option B: CLI
+
+laptop (uses `$AMI_ID` from above and `$SG_ID` / `$SUBNET_ID` from section 5):
+```bash
 INSTANCE_ID=$(aws ec2 run-instances \
   --image-id "$AMI_ID" \
   --instance-type t4g.small \
   --key-name devbox \
+  --subnet-id "$SUBNET_ID" \
   --security-group-ids "$SG_ID" \
   --iam-instance-profile Name=devbox-instance \
   --hibernation-options Configured=true \
@@ -137,26 +253,25 @@ INSTANCE_ID=$(aws ec2 run-instances \
 echo "$INSTANCE_ID"
 ```
 
-| Flag | Why |
-|---|---|
-| `al2023-ami-kernel-default-arm64` | Standard (not minimal) AL2023: ships hibinit agent, AWS CLI, SSM agent |
-| `--hibernation-options Configured=true` | **Can only be set at launch.** Without it, auto-hibernate can never work |
-| `HttpTokens=required,HttpPutResponseHopLimit=1` | IMDSv2 only; containers and SSRF'd dev servers can't reach instance credentials |
-| `InstanceMetadataTags=enabled` | Lets bootstrap read the Name tag from IMDS (no extra IAM). Safe: hop limit 1, and Name is not a secret |
-| `VolumeSize=40`, `Encrypted=true` | Hibernation requires encryption. 40 GB = OS + projects + 4 GB hibernation image + 2 GB swapfile |
-| `--disable-api-termination` | A stray `terminate-instances` can't delete the box |
-| `Name=devbox` tag | The IAM policies and the laptop helper find the instance by it |
+### After launch (both options)
 
-- [ ] Confirm the launch settings took:
+- [ ] Confirm the launch settings took (laptop):
   ```bash
   aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query \
-    'Reservations[0].Instances[0].[HibernationOptions.Configured,MetadataOptions.HttpTokens,MetadataOptions.InstanceMetadataTags,BlockDeviceMappings[0].Ebs.VolumeId]'
+    'Reservations[0].Instances[0].[ImageId,Placement.AvailabilityZone,HibernationOptions.Configured,MetadataOptions.HttpTokens,MetadataOptions.HttpPutResponseHopLimit,MetadataOptions.InstanceMetadataTags,SecurityGroups[0].GroupName]'
+  aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$INSTANCE_ID" \
+    --query 'Volumes[0].[Size,VolumeType,Encrypted,Tags[?Key==`Name`]|[0].Value]'
   ```
-  Expect `True`, `required`, `enabled`, and a volume id. On an already-running instance: `aws ec2 modify-instance-metadata-options --instance-id "$INSTANCE_ID" --instance-metadata-tags enabled`.
+  Expect: `$AMI_ID`, your section 5 zone, `True`, `required`, `1`, `enabled`, `devbox`; then `40`, `gp3`, `true`, `devbox`.
+- [ ] If metadata tags show `disabled`, fix it in place (no relaunch needed): `aws ec2 modify-instance-metadata-options --instance-id "$INSTANCE_ID" --instance-metadata-tags enabled`. Anything else wrong (above all hibernation `False` or an unencrypted volume) means terminate and relaunch: those can't be changed later.
 
 ## 8. Watch the bootstrap
 
-The SSM agent takes a minute or two to register after boot.
+No setup on the box is needed to watch the bootstrap: AL2023 ships the SSM agent, the instance role grants SSM, and the laptop has the session manager plugin from section 1. The agent takes a minute or two to register after boot. Three ways in, least to most access:
+
+- **No connection at all**: EC2 console > the instance > Actions > Monitor and troubleshoot > **Get system log** (or `aws ec2 get-console-output --instance-id "$INSTANCE_ID" --latest --output text`). The bootstrap's `==>` progress lines and any `!!! WARNING` show up there.
+- **Browser shell**: EC2 console > the instance > **Connect** > **Session Manager** tab > Connect.
+- **Laptop shell**: `aws ssm start-session --target "$INSTANCE_ID"` (check it's registered first: `aws ssm describe-instance-information --query 'InstanceInformationList[].[InstanceId,PingStatus]'` shows `Online`).
 
 ssm:
 ```bash
@@ -179,6 +294,12 @@ If the bootstrap failed partway, fix the cause and re-run it (it is idempotent):
   aws ssm delete-parameter --name /devbox/tailscale-authkey
   ```
 - [ ] Tailscale admin console shows `devbox` with `tag:devbox` and "Expiry disabled".
+- [ ] Make the least-privilege profile the default for everything on the laptop (coding agents included), and keep admin opt-in:
+  ```bash
+  echo 'export AWS_PROFILE=devbox' >> ~/.zshrc && exec zsh
+  aws sts get-caller-identity --query Arn --output text   # ends in .../AWSReservedSSO_DevboxOperator_...
+  ```
+  Later admin work: `aws --profile admin ...`. When `ssh devbox` can't wake the box because the SSO session expired, run `aws sso login --sso-session personal`.
 - [ ] Append [`laptop/ssh_config`](laptop/ssh_config) to `~/.ssh/config`.
 - [ ] Put the helper on your PATH:
   ```bash
@@ -190,6 +311,7 @@ If the bootstrap failed partway, fix the cause and re-run it (it is idempotent):
 Negative checks (all must fail):
 
 - [ ] `ssh ec2-user@devbox` is refused (`Permission denied`).
+- [ ] The default profile can't do admin things: `aws iam list-roles` fails with `AccessDenied`.
 - [ ] `ssh -A devbox 'ssh-add -l'` reports no agent (forwarding refused server-side).
 - [ ] The public IP is dark:
   ```bash
@@ -198,6 +320,12 @@ Negative checks (all must fail):
   nc -z -G 5 "$PUBLIC_IP" 22 && echo "EXPOSED" || echo "closed, good"
   ```
 - [ ] `devbox: sudo -n true` fails (no sudo for the agent user).
+
+Lock down launching (after the checks above pass):
+
+- [ ] IAM Identity Center > Permission sets > **AdministratorAccess** > Inline policy > paste [`iam/admin-no-launch-policy.json`](iam/admin-no-launch-policy.json). An explicit deny wins, so no one can launch instances (CLI or console, including spot and fleet requests) until this is deliberately removed; removing it is itself a logged action. Resizing, start/stop and hibernate are unaffected. SCPs can't do this: they never apply to the management account.
+- [ ] Check the deny works for **admin** (a fresh sign-in picks up the change): `aws sso login --sso-session personal`, then `aws --profile admin ec2 run-instances --dry-run --image-id "$AMI_ID" --instance-type t4g.small` fails with `UnauthorizedOperation`, not `DryRunOperation`.
+- [ ] Remove `[profile admin]` from `~/.aws/config`. The laptop CLI (and any agent on it) then only has `DevboxOperator`. When you need admin later, re-add the profile or use the console through the access portal.
 
 ## 10. Agent credentials (devbox)
 
@@ -234,6 +362,12 @@ Each check below says what `journalctl -t devbox-idle` should show.
 - [ ] `swapon --show`: `zram0` priority 100 and `/swapfile` priority 10. `/swap` is **not** listed (hibinit only enables it while hibernating).
 - [ ] `sudo nft list table inet devbox` prints the ruleset.
 - [ ] `systemctl list-timers 'devbox-*'` lists `devbox-idle.timer` and `devbox-update.timer`.
+- [ ] Headless browser works (devbox, as `dev`):
+  ```bash
+  mkdir -p ~/pwtest && cd ~/pwtest && npm init -y >/dev/null && npm install playwright && npx playwright install chromium
+  node -e "const {chromium}=require('playwright');(async()=>{const b=await chromium.launch();const p=await b.newPage();await p.goto('https://example.com');console.log(await p.title());await b.close()})()"
+  ```
+  Prints `Example Domain`. The "OS not officially supported" warning during install is expected on AL2023; the bootstrap installs the libraries it needs. Then `rm -rf ~/pwtest`.
 
 **Hibernate and resume** (devbox, then laptop)
 - [ ] In `tmux new -s main`: start a dev server in a sample project with `npm run dev -- --host`, open `http://devbox:5173` on the laptop.

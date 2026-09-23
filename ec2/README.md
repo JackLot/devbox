@@ -29,7 +29,8 @@ Start with [CHECKLIST.md](CHECKLIST.md) to launch and verify one.
 | [`CHECKLIST.md`](CHECKLIST.md) | Account hardening, launch, verification, resizing, teardown |
 | [`iam/instance-trust.json`](iam/instance-trust.json) | Lets EC2 assume the instance role |
 | [`iam/instance-policy.json`](iam/instance-policy.json) | Instance role: hibernate itself, read `/devbox/*` parameters (plus managed `AmazonSSMManagedInstanceCore`) |
-| [`iam/laptop-policy.json`](iam/laptop-policy.json) | Optional least-privilege policy for the laptop's AWS profile |
+| [`iam/laptop-policy.json`](iam/laptop-policy.json) | `DevboxOperator` permission set: the laptop's everyday access (start/stop/describe the devbox, SSM sessions) |
+| [`iam/admin-no-launch-policy.json`](iam/admin-no-launch-policy.json) | Deny added to `AdministratorAccess` after launch, so new instances can't be launched until it is deliberately lifted |
 | [`laptop/devbox`](laptop/devbox) | `devbox up / down / stop / status / ssm / proxy` |
 | [`laptop/ssh_config`](laptop/ssh_config) | `Host devbox` block with the wake-on-SSH ProxyCommand |
 
@@ -49,6 +50,7 @@ On the instance, the bootstrap installs:
 ## Decisions
 
 - **Amazon Linux 2023, not Ubuntu.** AWS supports Graviton hibernation on AL2023 and Ubuntu 20.04/22.04 only; Ubuntu 24.04 is not on the list, and the supported Ubuntu releases also recommend disabling KASLR. AL2023 ships `ec2-hibinit-agent`, the AWS CLI and the SSM agent in the standard AMI.
+- **arm64 (Graviton).** About 10-20% cheaper than x86 at the same size and the same architecture as Apple Silicon. Browser QA works through Playwright's Chromium (tested on AL2023 arm64 with the libraries the bootstrap installs); Google Chrome and Puppeteer's default Chrome download have no Linux arm64 build.
 - **Hibernate, never plain stop.** RAM is saved to the encrypted root volume, so agents, tmux and dev servers resume exactly where they were. This is what makes a dumb idle timer safe.
 - **SSH user has no sudo.** Whatever an agent can do, it does as `dev`. Root-level changes go through SSM, which is authenticated by IAM and logged in CloudTrail.
 - **Heartbeat hooks live in managed settings.** Every Claude Code session on the box gets them, and they can't be dropped from `~/.claude/settings.json` by accident or by an agent.
@@ -58,5 +60,5 @@ On the instance, the bootstrap installs:
 
 - A single tool call that runs longer than the idle window with low CPU (a slow download) can be hibernated mid-flight. It resumes on wake; raise `IDLE_MINUTES` if it bites.
 - A forgotten browser tab does not keep the box awake (by design). Waking it for the browser alone: `devbox up`.
-- EC2 user-data is capped at 16 KB. `bootstrap.sh` is about 14.5 KB, so keep comments concise; gzip it (cloud-init accepts gzipped user-data) if it outgrows that.
+- EC2 user-data is capped at 16 KB. `bootstrap.sh` is about 14.9 KB, so keep comments concise; gzip it (cloud-init accepts gzipped user-data) if it outgrows that.
 - The laptop helper assumes exactly one non-terminated instance tagged `Name=devbox`.

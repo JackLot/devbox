@@ -57,6 +57,9 @@ dnf -y --releasever=latest upgrade
 # GitHub CLI from GitHub's own repo (also kept current by the daily update)
 curl -fsSL https://cli.github.com/packages/rpm/gh-cli.repo -o /etc/yum.repos.d/gh-cli.repo
 dnf -y install git gh tmux unzip nftables zram-generator smart-restart
+# Libraries Playwright's Chromium needs (`npx playwright install-deps` is apt-only)
+dnf -y install atk at-spi2-atk at-spi2-core cups-libs libxcb libxkbcommon libX11 \
+  libXext libXcomposite libXdamage libXfixes libXrandr alsa-lib mesa-libgbm cairo pango
 
 cat > /etc/systemd/system/devbox-update.service <<'EOF'
 [Unit]
@@ -124,11 +127,14 @@ ClientAliveInterval 60
 ClientAliveCountMax 3
 EOF
 
-# Validate, reload, then confirm the drop-in actually took effect
+# Validate, reload, then confirm the drop-in actually took effect.
+# Output is captured before matching: under pipefail, `cmd | grep -q` fails
+# at random when grep exits early and cmd dies of SIGPIPE.
 sshd -t
 systemctl reload sshd
-sshd -T | grep -qx "allowusers $DEV_USER" || { echo "sshd drop-in not applied"; exit 1; }
-sshd -T | grep -qx "passwordauthentication no" || { echo "sshd password auth still on"; exit 1; }
+sshd_effective=$(sshd -T)
+grep -qx "allowusers $DEV_USER" <<<"$sshd_effective" || { echo "sshd drop-in not applied"; exit 1; }
+grep -qx "passwordauthentication no" <<<"$sshd_effective" || { echo "sshd password auth still on"; exit 1; }
 
 
 
@@ -204,7 +210,7 @@ if [[ ! -f /swapfile ]]; then
   mkswap /swapfile
 fi
 grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap defaults,pri=10 0 0' >> /etc/fstab
-swapon --show=NAME --noheadings | grep -qx /swapfile || swapon -p 10 /swapfile
+grep -qx /swapfile <<<"$(swapon --show=NAME --noheadings)" || swapon -p 10 /swapfile
 
 
 
@@ -278,13 +284,14 @@ idle_checks=$(( (IDLE_MINUTES + CHECK_INTERVAL_MIN - 1) / CHECK_INTERVAL_MIN ))
 # Prints the reason and returns 0 if anything counts as activity.
 is_active() {
   # Claude Code hooks touch HEARTBEAT_DIR; +1 min absorbs timer jitter
-  if find "$HEARTBEAT_DIR" -type f -mmin "-$((CHECK_INTERVAL_MIN + 1))" | grep -q .; then
+  # (captured, not piped to grep -q: that races with SIGPIPE under pipefail)
+  if [[ -n "$(find "$HEARTBEAT_DIR" -type f -mmin "-$((CHECK_INTERVAL_MIN + 1))" -print -quit)" ]]; then
     echo "agent heartbeat"; return 0
   fi
 
   # Open SSH session. sshd drops dead ones in ~3 min, but a session left open
   # on an awake laptop keeps the box up; consider a local idle auto-kill.
-  if ss -Htn state established '( sport = :22 )' | grep -q .; then
+  if [[ -n "$(ss -Htn state established '( sport = :22 )')" ]]; then
     echo "ssh session"; return 0
   fi
 
