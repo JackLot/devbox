@@ -1,7 +1,8 @@
-# Shared zsh config for the laptop and the devbox.
-# Lives in ~/dev/devbox/dotfiles/zsh/.zshrc, symlinked to ~/.zshrc (edit either).
-# Secrets and machine-specific setup go in ~/.zshrc.local (untracked, loaded last).
-# This file is in a PUBLIC repo: never put a secret here.
+# Shared zsh config for macOS laptop and Linux cloud devbox
+
+# Symlink this file to ~/.zshrc
+# Secrets and machine-specific setup go in ~/.zshrc.local (untracked, loaded last)
+# REMEMBER: This file is in a PUBLIC repo: don't put secrets here
 
 # ---- PATH -------------------------------------------------------------------
 typeset -U path   # drop duplicate PATH entries
@@ -24,7 +25,7 @@ if [[ $OSTYPE == linux* && "$(locale charmap 2>/dev/null)" != UTF-8 ]]; then
 fi
 
 # ---- Tool version managers ----------------------------------------------------
-# mise: CLI tools pinned in ~/.config/mise/config.toml (neovim, ripgrep, fd, ...)
+# mise: CLI tools in ~/.config/mise/config.toml (neovim, ripgrep, fd, ...)
 command -v mise >/dev/null && eval "$(mise activate zsh)"
 
 # fnm: Node versions (macOS and Linux install locations)

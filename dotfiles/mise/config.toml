@@ -1,5 +1,5 @@
-# Global mise tools, shared by the laptop and the devbox (symlinked to
-# ~/.config/mise/config.toml). Exact pins keep both machines identical; bump
+# Global mise tools, shared by the macOS laptop and the cloud devbox (symlinked to
+# ~/.config/mise/config.toml). Exact version pins keep both machines identical; bump
 # deliberately, then run `mise install` on each.
 # Machine-only tools go in ~/.config/mise/conf.d/local.toml (untracked).
 [tools]

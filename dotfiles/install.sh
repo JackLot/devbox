@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
+
 # Links the dotfiles into $HOME and installs what they need (macOS or Linux).
 # Safe to re-run. Anything already in the way is moved to ~/.dotfiles-backup/.
-#
-#   ~/dev/devbox/dotfiles/install.sh
 set -euo pipefail
 
+# Start by backing up existing dotfiles
 DOT=$(cd "$(dirname "$0")" && pwd)
 BACKUP="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)"
 
@@ -31,7 +31,7 @@ link tmux/.tmux.conf     "$HOME/.tmux.conf"
 link nvim                "$HOME/.config/nvim"
 link mise/config.toml    "$HOME/.config/mise/config.toml"
 
-# mise and the tools pinned in mise/config.toml (neovim, ripgrep, fd, fzf, tree-sitter)
+# mise and the tools in mise/config.toml (neovim, ripgrep, fd, fzf, tree-sitter)
 if [[ ! -x $HOME/.local/bin/mise ]] && ! command -v mise >/dev/null; then
   log "installing mise"
   curl -fsSL https://mise.run | sh
