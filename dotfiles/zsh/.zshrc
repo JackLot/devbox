@@ -73,5 +73,8 @@ setopt PROMPT_SUBST
 PS1=$'%F{69}%n%f on %F{cyan}%~%f ${vcs_info_msg_0_}${WORKTREE_INDICATOR} 
 \Uf0da '
 
+# Cloud icon at the start of the prompt on the devbox (the bootstrap writes this marker)
+[[ -e /var/lib/devbox/bootstrapped ]] && PS1=$'%F{117}\Uf0c2%f '"$PS1"
+
 # ---- Machine-specific settings and secrets (untracked) -------------------------
 [[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
