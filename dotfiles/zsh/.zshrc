@@ -73,8 +73,13 @@ setopt PROMPT_SUBST
 PS1=$'%F{69}%n%f on %F{cyan}%~%f ${vcs_info_msg_0_}${WORKTREE_INDICATOR} 
 \Uf0da '
 
-# Cloud icon at the start of the prompt on the devbox (the bootstrap writes this marker)
-[[ -e /var/lib/devbox/bootstrapped ]] && PS1=$'%F{117}\Uf0c2%f '"$PS1"
+# On the devbox (the bootstrap writes this marker): prefix "ec2|" and show it and
+# the username in pink (212) instead of blue, so the machine is obvious at a glance.
+if [[ -e /var/lib/devbox/bootstrapped ]]; then
+  laptop_user_color='%F{69}' devbox_color='%F{212}'
+  PS1="${devbox_color}ec2|%f${PS1/$laptop_user_color/$devbox_color}"
+  unset laptop_user_color devbox_color
+fi
 
 # ---- Machine-specific settings and secrets (untracked) -------------------------
 [[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
