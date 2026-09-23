@@ -24,7 +24,8 @@ instance_id() {
   ids=$(aws ec2 describe-instances \
     --filters "Name=tag:Name,Values=$NAME" \
               "Name=instance-state-name,Values=pending,running,stopping,stopped" \
-    --query 'Reservations[].Instances[].InstanceId' --output text)
+    --query 'Reservations[].Instances[].InstanceId' --output text) \
+    || die "AWS call failed (expired session? run: aws sso login; profile: ${AWS_PROFILE:-default})"
   read -r -a ids_arr <<<"$ids"
   (( ${#ids_arr[@]} == 1 )) \
     || die "expected exactly 1 instance tagged Name=$NAME, found ${#ids_arr[@]}"
@@ -84,7 +85,8 @@ case ${1:-} in
       --query 'Reservations[0].Instances[0].[InstanceId,State.Name,InstanceType]' --output text
     ;;
   ssm)
-    exec aws ssm start-session --target "$(instance_id)"
+    id=$(instance_id)
+    exec aws ssm start-session --target "$id"
     ;;
   proxy)
     (( $# == 3 )) || die "usage: devbox proxy <host> <port>"

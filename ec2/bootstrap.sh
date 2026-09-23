@@ -236,7 +236,9 @@ elif authkey=$(aws ssm get-parameter --region "$REGION" --name "$TAILSCALE_AUTHK
   keyfile=$(mktemp /run/devbox-tskey.XXXXXX)
   printf '%s' "$authkey" > "$keyfile"
   unset authkey
-  tailscale up --auth-key="file:$keyfile" --hostname="$TAILSCALE_HOSTNAME"
+  # Non-fatal: SSM still works, so a bad key shouldn't skip the rest of setup.
+  tailscale up --auth-key="file:$keyfile" --hostname="$TAILSCALE_HOSTNAME" \
+    || warn "tailscale up failed (bad or expired key?); fix $TAILSCALE_AUTHKEY_PARAM and re-run this script over SSM"
   rm -f "$keyfile"
 else
   warn "could not read $TAILSCALE_AUTHKEY_PARAM; join manually over SSM: sudo tailscale up --hostname=$TAILSCALE_HOSTNAME"

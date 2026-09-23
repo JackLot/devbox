@@ -107,11 +107,18 @@ Account defaults (admin profile):
   ```
   Save the policy **before** generating the auth key: a key can only carry `tag:devbox` once `tagOwners` declares it.
 - [ ] Generate an auth key (Settings > Keys, https://login.tailscale.com/admin/settings/keys): **Reusable off, Ephemeral off, Pre-approved on, Tags `tag:devbox`, Expiration 1 day**. Tagged nodes never hit key expiry, so the box won't drop off the tailnet after 180 days.
-- [ ] Store it in Parameter Store without it touching shell history (laptop):
+- [ ] Store it in Parameter Store without it touching shell history (laptop). Input is hidden, so paste **once** and press Enter; the check refuses anything that isn't exactly one key (e.g. pasted twice):
   ```bash
-  read -rs TS_KEY && aws ssm put-parameter --name /devbox/tailscale-authkey \
-    --type SecureString --value "$TS_KEY" --overwrite && unset TS_KEY
+  printf 'Paste the Tailscale auth key ONCE, then Enter: '; read -rs TS_KEY; echo
+  if [[ $TS_KEY == tskey-auth-* && $TS_KEY != *tskey-auth-*tskey-auth-* ]]; then
+    aws ssm put-parameter --name /devbox/tailscale-authkey --type SecureString \
+      --value "$TS_KEY" --overwrite && echo "stored (${#TS_KEY} chars)"
+  else
+    echo "not stored: that isn't a single tskey-auth-... key"
+  fi
+  unset TS_KEY
   ```
+  Expect about 60 characters.
 
 ## 4. Instance IAM role
 
@@ -203,7 +210,8 @@ echo "$AMI_ID"
 
 Console, signed in through the access portal as AdministratorAccess, region **US East (N. Virginia) us-east-1** (top right). EC2 > Instances > **Launch instances**. Only the fields listed here change; leave everything else at its default.
 
-- [ ] **Name and tags**: Name exactly `devbox` (the IAM policies, the bootstrap preflight and the laptop helper match this string; `my devbox` breaks auto-hibernate and `devbox up`). Open **Add additional tags** and make sure the Name tag's resource types include **Instances** and **Volumes** (by default it only tags the instance).
+- [ ] **Name and tags**: Name exactly `devbox`. The IAM policies, the bootstrap preflight and the laptop helper match this exact string; `my devbox` breaks auto-hibernate and `devbox up`.
+- [ ] **Tag the volume too**: still in **Name and tags**, click **Add additional tags**. The `Name` / `devbox` row appears with a **Resource types** dropdown; select **Volumes** in addition to **Instances**. Otherwise only the instance is tagged.
 - [ ] **Application and OS Images**: Quick Start > **Amazon Linux** > **Amazon Linux 2023 AMI** (not "minimal"), Architecture **64-bit (Arm)**. The AMI id shown under the name must equal `$AMI_ID`; if it doesn't, paste `$AMI_ID` into the AMI search box and pick that one.
 - [ ] **Instance type**: `t4g.small`.
 - [ ] **Key pair (login)**: `devbox`.
@@ -263,6 +271,13 @@ echo "$INSTANCE_ID"
     --query 'Volumes[0].[Size,VolumeType,Encrypted,Tags[?Key==`Name`]|[0].Value]'
   ```
   Expect: `$AMI_ID`, your section 5 zone, `True`, `required`, `1`, `enabled`, `devbox`; then `40`, `gp3`, `true`, `devbox`.
+- [ ] If the volume's Name shows `null`, tag it in place (no relaunch needed). Console: the instance > **Storage** tab > click the volume id > **Tags** > **Manage tags** > Add `Name` = `devbox` > Save. Or CLI:
+  ```bash
+  VOL_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$INSTANCE_ID" \
+    --query 'Volumes[0].VolumeId' --output text)
+  aws ec2 create-tags --resources "$VOL_ID" --tags Key=Name,Value=devbox
+  ```
+  The instance's own Name tag can be fixed the same way (`--resources "$INSTANCE_ID"`); it must be exactly `devbox`. The volume tag is only for identification and backups (section 13), so it isn't critical; the instance tag is.
 - [ ] If metadata tags show `disabled`, fix it in place (no relaunch needed): `aws ec2 modify-instance-metadata-options --instance-id "$INSTANCE_ID" --instance-metadata-tags enabled`. Anything else wrong (above all hibernation `False` or an unencrypted volume) means terminate and relaunch: those can't be changed later.
 
 ## 8. Watch the bootstrap
@@ -283,6 +298,8 @@ sudo journalctl -u hibinit-agent --no-pager | tail -n 20
 - [ ] Log ends with `Bootstrap complete` and contains no `!!! WARNING` lines.
 - [ ] hibinit-agent log shows the swap file created and the resume offset set, with no "Insufficient disk space".
 - [ ] Reboot once, so any kernel installed by the bootstrap's upgrade is running (this also tests the reboot path): `sudo reboot`
+
+If the log shows `tailscale up failed` or `invalid key`, re-store the key (section 3; a single-use key that was rejected was never consumed) and re-run the bootstrap. The rest of the setup still completes without Tailscale, and SSM keeps working.
 
 If the bootstrap failed partway, fix the cause and re-run it (it is idempotent):
 `sudo bash /var/lib/cloud/instance/scripts/part-001`
