@@ -1,0 +1,13 @@
+# Global mise tools, shared by the macOS laptop and the cloud devbox (symlinked to
+# ~/.config/mise/config.toml; not named config.toml here, or mise treats it as an
+# untrusted project config when you work inside dotfiles/). Exact version pins
+# keep both machines identical; bump deliberately, then run `mise install` on each.
+# Machine-only tools go in ~/.config/mise/conf.d/local.toml (untracked).
+[tools]
+neovim = "0.12.5"
+ripgrep = "15.2.0"
+fd = "10.5.0"
+fzf = "0.74.4"
+# macOS only: the Linux arm64 builds need glibc 2.35+, Amazon Linux 2023 has 2.34.
+# nvim skips parser installs where the tree-sitter CLI is missing.
+tree-sitter = { version = "0.26.11", os = ["macos"] }

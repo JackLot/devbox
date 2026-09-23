@@ -29,9 +29,9 @@ link() {
 link zsh/.zshrc          "$HOME/.zshrc"
 link tmux/.tmux.conf     "$HOME/.tmux.conf"
 link nvim                "$HOME/.config/nvim"
-link mise/config.toml    "$HOME/.config/mise/config.toml"
+link mise/global.toml    "$HOME/.config/mise/config.toml"
 
-# mise and the tools in mise/config.toml (neovim, ripgrep, fd, fzf, tree-sitter)
+# mise and the tools in mise/global.toml (neovim, ripgrep, fd, fzf, tree-sitter)
 if [[ ! -x $HOME/.local/bin/mise ]] && ! command -v mise >/dev/null; then
   log "installing mise"
   curl -fsSL https://mise.run | sh

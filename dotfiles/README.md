@@ -18,7 +18,7 @@ must be pushed first). On an existing devbox: `cd ~/devbox && git pull && dotfil
 | `zsh/.zshrc` | `~/.zshrc` | Prompt (git branch + worktree indicator, Nerd Font icons), aliases, history, fnm, mise |
 | `tmux/.tmux.conf` | `~/.tmux.conf` | Prefix `C-Space`, `\|`/`-` splits, Catppuccin mocha via TPM, truecolor, OSC 52 clipboard |
 | `nvim/` | `~/.config/nvim` | kickstart.nvim (MIT, see `nvim/LICENSE.md`) with local changes; `nvim-pack-lock.json` pins plugins |
-| `mise/config.toml` | `~/.config/mise/config.toml` | Exact version pins: neovim, ripgrep, fd, fzf, tree-sitter (Amazon's linux distro, AL2023, packages none of these). Since versions are pinned, update this mise file and reinstall, see comments in the config |
+| `mise/global.toml` | `~/.config/mise/config.toml` | Exact version pins: neovim, ripgrep, fd, fzf, tree-sitter (Amazon's linux distro, AL2023, packages none of these). Since versions are pinned, update this mise file and reinstall, see comments in the config |
 
 `install.sh` moves anything already in the way to `~/.dotfiles-backup/<timestamp>/`.
 
@@ -35,6 +35,6 @@ shared config loads if present:
 
 ## Changing things
 
-- **Tool versions:** bump the pin in `mise/config.toml`, then `mise install` on each machine.
+- **Tool versions:** bump the pin in `mise/global.toml`, then `mise install` on each machine.
 - **nvim plugins:** `:lua vim.pack.update()`, review, commit the updated `nvim-pack-lock.json`, then `git pull` + open nvim on the other machine.
 - **Terminal font:** icons render on the laptop's terminal (Nerd Font); the devbox needs no fonts.
