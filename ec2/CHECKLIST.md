@@ -316,8 +316,9 @@ If the bootstrap failed partway, fix the cause and re-run it (it is idempotent):
   echo 'export AWS_PROFILE=devbox' >> ~/.zshrc && exec zsh
   aws sts get-caller-identity --query Arn --output text   # ends in .../AWSReservedSSO_DevboxOperator_...
   ```
-  Later admin work: `aws --profile admin ...`. When `ssh devbox` can't wake the box because the SSO session expired, run `aws sso login --sso-session personal`.
+  Later admin work: `aws --profile admin ...`. When the SSO session has expired, `ssh devbox` and the `devbox` helper open the browser sign-in themselves and carry on; they default to the `devbox` profile, so GUI apps that never read `~/.zshrc` (Cursor) work too.
 - [ ] Append [`laptop/ssh_config`](laptop/ssh_config) to `~/.ssh/config`.
+- [ ] Ghostty only: add `shell-integration-features = ssh-env,ssh-terminfo` to its config. The box has no `xterm-ghostty` terminfo, so without this the prompt has no colors and tmux fails with `missing or unsuitable terminal`. The first `ssh devbox` then installs it into `~/.terminfo`.
 - [ ] Put the helper on your PATH:
   ```bash
   mkdir -p ~/.local/bin && ln -sf ~/dev/devbox/ec2/laptop/devbox ~/.local/bin/devbox

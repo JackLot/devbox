@@ -15,11 +15,24 @@ Start with [CHECKLIST.md](CHECKLIST.md) to launch and verify one.
 | Dev servers | Bind to `0.0.0.0`, browse `http://devbox:<port>` from any tailnet device |
 | Admin access | `devbox ssm`: SSM Session Manager shell (`ssm-user`, has sudo), IAM-authenticated, no port 22 needed |
 | Idle cost | `devbox-idle.timer` checks every 5 min; after 30 idle min it calls `ec2:StopInstances --hibernate` on itself |
-| Waking up | `ssh devbox` runs `laptop/devbox proxy`, which starts the instance if needed and waits for sshd |
+| Waking up | `ssh devbox` runs `laptop/devbox proxy`, which signs in to SSO if the session expired (browser), starts the instance if needed and waits for sshd |
 | "Active" means | Claude Code heartbeat (managed hooks) in the last 5 min, an SSH session, or 5-min load above 25% of cores |
 | Memory | zram (priority 100) then `/swapfile` (priority 10). `/swap` is owned by `ec2-hibinit-agent` for the hibernation image only |
 | Updates | `devbox-update.timer`: daily `dnf --releasever=latest upgrade` (AL2023 repos are otherwise pinned to the AMI's release) |
 | Secrets at boot | Tailscale auth key read from SSM Parameter Store (`/devbox/tailscale-authkey`), never in user-data |
+
+## Editing from Cursor (Remote-SSH)
+
+Cursor edits files on the box directly over Remote-SSH, so there is no local copy to keep in sync.
+The editor UI runs on the laptop; files, terminal, language servers and git all run on the devbox.
+
+1. Install the `Host devbox` block from [`laptop/ssh_config`](laptop/ssh_config) (Remote-SSH uses the system `ssh`, so the wake-on-connect ProxyCommand applies).
+2. In Cursor settings, raise `remote.SSH.connectTimeout` to `300`. Resuming from hibernation takes longer than the default 15 s, the proxy waits up to 180 s for sshd, and an expired SSO session adds a browser sign-in first.
+3. Command Palette → **Remote-SSH: Connect to Host** → `devbox`. The first connect installs Cursor's server into `~/.cursor-server` (linux-arm64).
+4. **File → Open Folder** → a path under `/home/dev`.
+
+An open Cursor window holds an SSH connection, which counts as activity, so the box will not hibernate while one is open.
+Close the remote window (or quit Cursor) when you are done. If the laptop sleeps, sshd drops the dead connection within about 3 minutes.
 
 ## Files
 

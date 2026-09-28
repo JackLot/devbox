@@ -8,10 +8,13 @@
 #   devbox ssm       admin shell over SSM (sudo-capable ssm-user)
 #   devbox proxy H P SSH ProxyCommand: wake the box, wait for sshd, then connect
 #
-# Finds the instance by its Name tag. Uses the normal AWS CLI credential chain,
-# so set AWS_PROFILE if the devbox lives in a non-default profile.
+# Finds the instance by its Name tag. Uses the AWS profile in AWS_PROFILE,
+# defaulting to "devbox" so it also works from GUI apps (Cursor Remote-SSH)
+# that never read ~/.zshrc. An expired SSO session triggers `aws sso login`
+# (browser sign-in) and the command carries on.
 set -euo pipefail
 
+export AWS_PROFILE=${AWS_PROFILE:-devbox}
 NAME=${DEVBOX_NAME:-devbox}
 SSH_WAIT_SECONDS=${DEVBOX_SSH_WAIT_SECONDS:-180}
 
@@ -19,13 +22,22 @@ SSH_WAIT_SECONDS=${DEVBOX_SSH_WAIT_SECONDS:-180}
 log() { echo "devbox: $*" >&2; }
 die() { log "$*"; exit 1; }
 
+# Sign in to SSO if the cached session has expired. stdin/stdout are detached
+# because in proxy mode they are the SSH byte stream.
+ensure_login() {
+  aws sts get-caller-identity >/dev/null 2>&1 && return 0
+  log "AWS session expired (profile: $AWS_PROFILE); opening browser for SSO sign-in"
+  aws sso login </dev/null >&2 || die "aws sso login failed (profile: $AWS_PROFILE)"
+}
+
 instance_id() {
   local ids
+  ensure_login
   ids=$(aws ec2 describe-instances \
     --filters "Name=tag:Name,Values=$NAME" \
               "Name=instance-state-name,Values=pending,running,stopping,stopped" \
     --query 'Reservations[].Instances[].InstanceId' --output text) \
-    || die "AWS call failed (expired session? run: aws sso login; profile: ${AWS_PROFILE:-default})"
+    || die "AWS call failed (profile: $AWS_PROFILE)"
   read -r -a ids_arr <<<"$ids"
   (( ${#ids_arr[@]} == 1 )) \
     || die "expected exactly 1 instance tagged Name=$NAME, found ${#ids_arr[@]}"
