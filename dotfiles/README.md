@@ -30,7 +30,7 @@ shared config loads if present:
 | File | Laptop | Devbox |
 |---|---|---|
 | `~/.zshrc.local` (mode 600) | API keys, AWS_PROFILE, nvm, pyenv, bun, Postgres | not needed |
-| `~/.tmux.local.conf` | battery plugin + status segment | `prefix C-a` (the bootstrap writes it), so nested tmux over SSH doesn't clash with the laptop's `C-Space` |
+| `~/.tmux.local.conf` | battery plugin + status segment | `prefix C-a` and `prefix2 C-Space` (the bootstrap writes it), so C-a still works when nested under the laptop's tmux over SSH |
 | `~/.config/mise/conf.d/local.toml` | `ruby = "3"` | not needed |
 
 ## Changing things

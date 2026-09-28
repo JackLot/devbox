@@ -434,8 +434,8 @@ systemctl enable --now devbox-update.timer devbox-idle.timer
 # ---- DOTFILES (AS THE DEV USER) ---------------------------------------------
 # zsh/tmux/nvim config shared with the laptop. Non-fatal: the box works without it.
 log "Installing dotfiles for $DEV_USER"
-tmux_local="$dev_home/.tmux.local.conf"   # devbox prefix C-a: no clash with the laptop's C-Space
-[[ -f $tmux_local ]] || { printf 'set -g prefix C-a\nbind a send-prefix\n' > "$tmux_local"; chown "$DEV_USER:" "$tmux_local"; }
+tmux_local="$dev_home/.tmux.local.conf"   # prefix C-a (nested under laptop tmux) or C-Space
+[[ -f $tmux_local ]] || { printf 'set -g prefix C-a\nset -g prefix2 C-Space\nbind a send-prefix\n' > "$tmux_local"; chown "$DEV_USER:" "$tmux_local"; }
 runuser -l "$DEV_USER" -s /bin/bash -c \
   "{ [ -d ~/devbox ] || git clone $DOTFILES_REPO ~/devbox; } && ~/devbox/dotfiles/install.sh" \
   || warn "dotfiles install failed; re-run as $DEV_USER: ~/devbox/dotfiles/install.sh"
