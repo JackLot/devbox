@@ -192,7 +192,7 @@ Two ways to launch the same instance: **Option A (console)** or **Option B (CLI)
 | Hibernation enabled | **Can only be set at launch.** Without it, auto-hibernate can never work |
 | IMDSv2 required, hop limit 1 | Containers and SSRF'd dev servers can't reach instance credentials |
 | Instance metadata tags enabled | Lets bootstrap read the Name tag from IMDS (no extra IAM). Safe: hop limit 1, and Name is not a secret |
-| 40 GB gp3, encrypted | Hibernation requires encryption. 40 GB = OS + projects + 4 GB hibernation image + 2 GB swapfile |
+| 40 GB gp3, encrypted | Hibernation requires encryption. 40 GB = OS + projects + 4 GB hibernation image + 2 GB pagefile |
 | Termination protection | A stray terminate can't delete the box |
 | Subnet from section 5 | Pins the zone, so the launch never lands in one without t4g |
 | Security group `devbox` | No inbound rules |
@@ -377,7 +377,7 @@ sudo journalctl -t devbox-idle -f        # leave this running in an SSM tab
 Each check below says what `journalctl -t devbox-idle` should show.
 
 **Baseline** (ssm)
-- [ ] `swapon --show`: `zram0` priority 100 and `/swapfile` priority 10. `/swap` is **not** listed (hibinit only enables it while hibernating).
+- [ ] `swapon --show`: `zram0` priority 100 and `/pagefile` priority 10. `/swap` is **not** listed (hibinit only enables it while hibernating).
 - [ ] `sudo nft list table inet devbox` prints the ruleset.
 - [ ] `systemctl list-timers 'devbox-*'` lists `devbox-idle.timer` and `devbox-update.timer`.
 - [ ] Dotfiles applied (devbox): the prompt matches the laptop's (git branch icon, worktree tag), `echo $SHELL` is `/bin/zsh`, `tmux` shows the Catppuccin bar with prefix `C-a`, and `nvim` opens with your plugins (language servers finish installing on first open). DNS works: `getent hosts github.com` resolves.

@@ -188,7 +188,9 @@ EOF
 
 # ---- MEMORY: ZRAM + RUNTIME SWAPFILE ---------------------------------------
 # /swap belongs to ec2-hibinit-agent (hibernation image only, swapped off at
-# runtime). Runtime swap is zram first, then /swapfile on disk.
+# runtime). Runtime swap is zram first, then /pagefile on disk. Its name must
+# not contain "/swap": the agent greps `swapon --show` for that substring and,
+# on a match, never enables /swap, so hibernation fails and EC2 plain-stops.
 log "Configuring zram and runtime swap"
 
 # Config for systemd's zram generator (not a service); applied at boot
@@ -201,19 +203,26 @@ EOF
 
 
 
-swap_bytes=$((RUNTIME_SWAP_MB * 1024 * 1024))
-if [[ -f /swapfile && "$(stat -c %s /swapfile)" -ne "$swap_bytes" ]]; then
+# Replaces /swapfile from earlier bootstraps
+if [[ -f /swapfile ]]; then
   swapoff /swapfile 2>/dev/null || true
   rm -f /swapfile
+  sed -i '\|^/swapfile |d' /etc/fstab
 fi
-if [[ ! -f /swapfile ]]; then
+pf=/pagefile
+swap_bytes=$((RUNTIME_SWAP_MB * 1024 * 1024))
+if [[ -f $pf && "$(stat -c %s $pf)" -ne "$swap_bytes" ]]; then
+  swapoff $pf 2>/dev/null || true
+  rm -f $pf
+fi
+if [[ ! -f $pf ]]; then
   # dd rather than fallocate: XFS swapfiles must not contain unwritten extents
-  dd if=/dev/zero of=/swapfile bs=1M count="$RUNTIME_SWAP_MB" status=none
-  chmod 600 /swapfile
-  mkswap /swapfile
+  dd if=/dev/zero of=$pf bs=1M count="$RUNTIME_SWAP_MB" status=none
+  chmod 600 $pf
+  mkswap $pf
 fi
-grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap defaults,pri=10 0 0' >> /etc/fstab
-grep -qx /swapfile <<<"$(swapon --show=NAME --noheadings)" || swapon -p 10 /swapfile
+grep -q "^$pf " /etc/fstab || echo "$pf none swap defaults,pri=10 0 0" >> /etc/fstab
+grep -qx $pf <<<"$(swapon --show=NAME --noheadings)" || swapon -p 10 $pf
 
 
 

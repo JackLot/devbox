@@ -17,7 +17,7 @@ Start with [CHECKLIST.md](CHECKLIST.md) to launch and verify one.
 | Idle cost | `devbox-idle.timer` checks every 5 min; after 30 idle min it calls `ec2:StopInstances --hibernate` on itself |
 | Waking up | `ssh devbox` runs `laptop/devbox proxy`, which signs in to SSO if the session expired (browser), starts the instance if needed and waits for sshd |
 | "Active" means | Claude Code heartbeat (managed hooks) in the last 5 min, an SSH session, or 5-min load above 25% of cores |
-| Memory | zram (priority 100) then `/swapfile` (priority 10). `/swap` is owned by `ec2-hibinit-agent` for the hibernation image only |
+| Memory | zram (priority 100) then `/pagefile` (priority 10). `/swap` is owned by `ec2-hibinit-agent` for the hibernation image only; no other swap may have `/swap` in its path (the agent substring-matches it) |
 | Updates | `devbox-update.timer`: daily `dnf --releasever=latest upgrade` (AL2023 repos are otherwise pinned to the AMI's release) |
 | Secrets at boot | Tailscale auth key read from SSM Parameter Store (`/devbox/tailscale-authkey`), never in user-data |
 
@@ -56,7 +56,7 @@ On the instance, the bootstrap installs:
 | `/etc/claude-code/managed-settings.d/50-devbox-heartbeat.json` | Hooks that touch `/var/lib/devbox-activity/claude` |
 | `/etc/nftables/devbox.nft` + `devbox-firewall.service` | Host firewall in its own table |
 | `/etc/ssh/sshd_config.d/01-devbox.conf` | sshd hardening |
-| `/etc/systemd/zram-generator.conf`, `/swapfile` | Runtime memory overflow |
+| `/etc/systemd/zram-generator.conf`, `/pagefile` | Runtime memory overflow |
 | `devbox-update.timer`, `devbox-idle.timer` | Daily updates, idle checks |
 | `/var/log/devbox-bootstrap.log` | Bootstrap output |
 
