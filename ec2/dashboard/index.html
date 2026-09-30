@@ -125,6 +125,22 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .modal-head h2 { font-size: 16px; margin: 0; color: var(--ink); }
 .modal-head .theme { margin-left: auto; }
+.modal-head h2.clip { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* session live log */
+.open-log { cursor: pointer; }
+.sess.open-log:hover .ttl, .sess.open-log:focus-visible .ttl { color: var(--s1); }
+.open-log:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+.slog { height: min(70vh, 700px); }
+.slog .ev { margin: 0 0 8px; }
+.slog .user { color: var(--s1); font-weight: 600; }
+.slog .tool b { font-weight: 600; }
+.slog .cmdline { color: var(--ink-2); }
+.slog .res, .slog .think { color: var(--muted); }
+.slog .res.err { color: var(--critical); }
+.slog summary { cursor: pointer; list-style: none; }
+.slog summary::-webkit-details-marker { display: none; }
+.slog details[open] > summary .more { display: none; }
+.slog .more { color: var(--s1); }
 
 /* tiles */
 .tile .label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
@@ -330,6 +346,16 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
         <div class="note" id="logNote"></div>
       </div>
     </div>
+  </dialog>
+
+  <dialog class="modal" id="slogModal" aria-labelledby="slogTitle">
+    <div class="modal-head">
+      <span id="slogStatus"></span>
+      <h2 class="clip" id="slogTitle">Session</h2>
+      <button class="theme" id="slogClose" type="button">Close</button>
+    </div>
+    <pre class="log slog" id="slog"></pre>
+    <div class="note" id="slogNote"></div>
   </dialog>
 
   <section class="card sessions" id="claudeCard" hidden>
@@ -642,6 +668,99 @@ document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
 
 const sessionTitle = s => s.title || (s.prompt ? s.prompt.slice(0, 120) : s.name || "session " + s.pid);
 
+// A session row opens its live log. Closes the opening tag's class attribute.
+const logAttrs = s => s.session_id
+  ? ` open-log" data-sid="${esc(s.session_id)}" role="button" tabindex="0" aria-haspopup="dialog" title="Watch this session's log"`
+  : '"';
+
+// Live log modal: follows the session's transcript, polling for what was
+// appended since the last byte offset. Claude Code writes a line per finished
+// block, so text arrives a block at a time, not token by token.
+const slogModal = $("slogModal");
+let slog = null;  // {sid, offset, timer, busy}
+function openSessionLog(sid) {
+  if (slog) clearInterval(slog.timer);
+  slog = { sid, offset: -1, busy: false };
+  $("slog").innerHTML = "";
+  $("slogNote").textContent = "Loading…";
+  slogHead();
+  slogModal.showModal();
+  fetchSessionLog();
+  slog.timer = setInterval(fetchSessionLog, 1500);
+}
+function slogHead() {
+  const s = slog && ((last && last.claude) || []).find(x => x.session_id === slog.sid);
+  if (!s) return;
+  $("slogTitle").textContent = sessionTitle(s);
+  $("slogTitle").title = sessionTitle(s) + "\n" + (s.cwd || "");
+  $("slogStatus").innerHTML = sessionChip(s, Date.now() / 1000);
+}
+slogModal.addEventListener("close", () => { if (slog) clearInterval(slog.timer); slog = null; });
+$("slogClose").onclick = () => slogModal.close();
+slogModal.onclick = e => {
+  const r = slogModal.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) slogModal.close();
+};
+
+async function fetchSessionLog() {
+  const cur = slog;
+  if (!cur || cur.busy || document.hidden) return;
+  cur.busy = true;
+  try {
+    for (let i = 0; i < 20 && slog === cur; i++) {  // catch up on a burst, a step at a time
+      const r = await fetch(`api/session-log?id=${encodeURIComponent(cur.sid)}&from=${cur.offset}`,
+        { cache: "no-store", headers: { "X-Dashboard": "1" } });
+      const d = await r.json().catch(() => ({ message: "HTTP " + r.status }));
+      if (slog !== cur) return;
+      if (!r.ok) { $("slogNote").textContent = "Can't load the log: " + d.message; return; }
+      const el = $("slog");
+      const atBottom = cur.offset < 0 || el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+      el.insertAdjacentHTML("beforeend", d.events.map(logEvent).join(""));
+      cur.offset = d.offset;
+      if (atBottom) el.scrollTop = el.scrollHeight;
+      $("slogNote").textContent = "Live · updates every few seconds, one message or tool call at a time";
+      if (!d.more) break;
+    }
+  } catch (e) {
+    if (slog === cur) $("slogNote").textContent = "Can't reach the dashboard server.";
+  } finally {
+    cur.busy = false;
+  }
+}
+
+const hms = t => { const d = new Date(t); return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); };
+// Long text folds to its first lines; click to expand.
+function fold(text, lines, cls) {
+  const all = text.replace(/\s+$/, "").split("\n");
+  if (all.length <= lines) return `<div class="${cls}">${esc(all.join("\n"))}</div>`;
+  return `<details class="${cls}"><summary>${esc(all.slice(0, lines).join("\n"))}\n<span class="more">… ${all.length - lines} more lines</span></summary>${esc(all.slice(lines).join("\n"))}</details>`;
+}
+function logEvent(e) {
+  const t = `<span class="t">${hms(e.t)}</span> `;
+  if (e.kind === "user") return `<div class="ev">${t}<span class="user">› ${esc(e.text)}</span></div>`;
+  if (e.kind === "text") return `<div class="ev">${t}${esc(e.text)}</div>`;
+  if (e.kind === "tool") {
+    const cmd = e.cmd && e.cmd !== e.text ? `<div class="cmdline">  $ ${esc(e.cmd)}</div>` : "";
+    return `<div class="ev tool">${t}● <b>${esc(e.tool)}</b> ${esc(e.text)}${cmd}</div>`;
+  }
+  if (e.kind === "result") {
+    const text = (e.text || "(no output)") + (e.cut ? "\n[truncated]" : "");
+    return `<div class="ev">${fold("  ⎿ " + text.replace(/\n/g, "\n    "), 4, "res" + (e.error ? " err" : ""))}</div>`;
+  }
+  if (e.kind === "thinking") return e.text ? `<div class="ev">${fold("✻ " + e.text, 2, "think")}</div>` : `<div class="ev think">${t}✻ thinking</div>`;
+  return "";
+}
+
+$("claude").addEventListener("click", e => {
+  const row = e.target.closest(".open-log");
+  if (!row || e.target.closest("a, button") || String(getSelection())) return;
+  openSessionLog(row.dataset.sid);
+});
+$("claude").addEventListener("keydown", e => {
+  const row = e.target.closest(".open-log");
+  if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openSessionLog(row.dataset.sid); }
+});
+
 const words = s => String(s).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\s*dialog$/i, "").toLowerCase();
 
 // One line of what the session is doing or last said, like `claude agents`.
@@ -670,7 +789,7 @@ function renderCompact(list, now) {
         ? '<svg width="11" height="11" viewBox="0 0 12 12"><path d="M6 1v10M1.7 3.5l8.6 5M1.7 8.5l8.6-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
         : '<svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>';
       const title = sessionTitle(s), detail = sessionDetail(s);
-      html += `<div class="row">
+      html += `<div class="row${logAttrs(s)}>
         <span class="g ${esc(st)}" aria-hidden="true">${glyph}</span>
         <span class="t" title="${esc(title)}">${esc(title)}</span>
         <span class="d" title="${esc(detail)}"><span class="st">${esc(STATUS[s.status] || s.status)}</span>${detail ? " · " + esc(detail) : ""}</span>
@@ -690,12 +809,13 @@ function renderClaude(d) {
   $("claudeCounts").innerHTML = [["busy", "working"], ["waiting", "need input"], ["idle", "idle"], ["stopped", "stopped"]]
     .map(([st, word]) => n(st) ? `<span class="${st}">${n(st)} ${word}</span>` : "").filter(Boolean).join(" ");
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === claudeView)));
+  slogHead();
   if (claudeView === "compact") { $("claude").innerHTML = renderCompact(list, now); return; }
   $("claude").innerHTML = list.map(s => {
     const title = sessionTitle(s);
     const ids = s.status === "stopped" ? `pid ${s.pid}` :
       `pid ${s.pid}${s.cpu != null ? " · " + s.cpu.toFixed(1) + "% CPU" : ""}${s.rss ? " · " + bytes(s.rss, 0) : ""}`;
-    return `<div class="sess">
+    return `<div class="sess${logAttrs(s)}>
       <div class="top">${sessionChip(s, now)}<span class="sep">•</span>
         <span class="where" title="${esc(s.cwd)}">${esc(home(s.cwd))}${s.branch ? " · " + esc(s.branch) : ""}</span>
         <span class="ids">${ids}</span>${s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + title + "”")}</div>

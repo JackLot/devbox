@@ -40,7 +40,6 @@ Read this before starting; add to it when you learn something a future run would
   unstaged edits. Check this even when the newest comment asks for nothing new: a re-run with
   no new requests can mean they saved tweaks after your last push (compare entry timestamps
   with the last commit time).
-
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the

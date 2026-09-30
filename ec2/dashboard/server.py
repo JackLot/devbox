@@ -467,6 +467,85 @@ def find_transcript(session_id):
     return None
 
 
+# Live log: the session modal polls with the byte offset it has read up to and
+# gets back only whole lines appended since. Claude Code writes one transcript
+# line per finished content block (text, tool call, tool result), so this
+# follows the session block by block, not token by token.
+
+LOG_FIRST = 256 << 10  # first open: the tail of the transcript
+LOG_STEP = 1 << 20     # most read per poll
+LOG_TEXT = 4000        # longest text or tool result sent
+SESSION_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _result_text(content):
+    if isinstance(content, list):
+        content = "\n".join(b.get("text", "") if b.get("type") == "text" else "[%s]" % b.get("type")
+                            for b in content if isinstance(b, dict))
+    return content if isinstance(content, str) else ""
+
+
+def log_events(d):
+    """Transcript line -> events the modal shows. Bookkeeping lines
+    (attachments, titles, hooks) and subagent sidechains are skipped."""
+    kind = d.get("type")
+    if kind not in ("user", "assistant") or d.get("isSidechain"):
+        return []
+    t = d.get("timestamp")
+    content = (d.get("message") or {}).get("content")
+    if isinstance(content, str):
+        if kind == "user" and not d.get("isMeta") and content.strip() and not content.startswith("<"):
+            return [{"t": t, "kind": "user", "text": content[:LOG_TEXT]}]
+        return []
+    out = []
+    for b in content if isinstance(content, list) else []:
+        bt = b.get("type") if isinstance(b, dict) else None
+        if bt == "text" and b.get("text", "").strip():
+            text = b["text"]
+            if kind == "user" and (d.get("isMeta") or text.startswith("<")):
+                continue
+            out.append({"t": t, "kind": "text" if kind == "assistant" else "user", "text": text[:LOG_TEXT]})
+        elif bt == "tool_use":
+            cmd = (b.get("input") or {}).get("command")
+            out.append({"t": t, "kind": "tool", "tool": b.get("name"), "text": _tool_summary(b),
+                        "cmd": cmd[:LOG_TEXT] if isinstance(cmd, str) else None})
+        elif bt == "tool_result":
+            text = _result_text(b.get("content"))
+            out.append({"t": t, "kind": "result", "error": bool(b.get("is_error")),
+                        "text": text[:LOG_TEXT], "cut": len(text) > LOG_TEXT})
+        elif bt == "thinking":
+            out.append({"t": t, "kind": "thinking", "text": (b.get("thinking") or "")[:LOG_TEXT]})
+    return out
+
+
+def session_log(session_id, offset):
+    """New events in a session's transcript since byte offset (-1: its tail)."""
+    path = find_transcript(session_id)
+    if not path:
+        return None
+    size = os.path.getsize(path)
+    if offset < 0 or offset > size:  # first poll, or the file was replaced
+        offset = max(0, size - LOG_FIRST)
+    with open(path, "rb") as f:
+        f.seek(offset)
+        data = f.read(LOG_STEP)
+    if offset and not (offset == size or data.startswith(b"{")):
+        cut = data.find(b"\n") + 1  # landed mid-line: skip to the next one
+        offset, data = offset + cut, data[cut:] if cut else b""
+    end = data.rfind(b"\n") + 1  # a partly written last line waits for the next poll
+    if not end and len(data) == LOG_STEP:
+        end = len(data)  # one line longer than LOG_STEP: skip it rather than stall
+    events = []
+    for raw in data[:end].split(b"\n"):
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(d, dict):
+            events.extend(log_events(d))
+    return {"offset": offset + end, "size": size, "more": offset + end < size, "events": events}
+
+
 def git_branch(cwd):
     d = cwd
     while d and d != "/":
@@ -1222,6 +1301,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(403, refused)
             d = safe(run_details, parse_qs(url.query).get("log", [""])[0])
             self.json(d) if d else self.send(404, b"no such run log\n", "text/plain")
+        elif url.path == "/api/session-log":
+            # Transcripts hold code, prompts and command output: same checks
+            # as /api/runner/run.
+            refused = self.refuse_foreign(origin_required=False)
+            if refused:
+                return self.reply(403, refused)
+            q = parse_qs(url.query)
+            sid = q.get("id", [""])[0]
+            try:
+                offset = int(q.get("from", ["-1"])[0])
+            except ValueError:
+                return self.reply(400, "from must be a byte offset")
+            if not SESSION_ID.match(sid):
+                return self.reply(400, "expected ?id=<session id>")
+            log = safe(session_log, sid, offset)
+            if log is None:
+                return self.reply(404, "no transcript for that session")
+            self.json(log)
         else:
             self.send(404, b"not found\n", "text/plain")
 
