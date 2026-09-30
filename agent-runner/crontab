@@ -1,0 +1,5 @@
+# Installed into the user crontab by install.sh (between the BEGIN/END markers),
+# with @HOME@ and @DIR@ (this folder) filled in.
+# cron doesn't load ~/.zshrc, so PATH lists claude, gh, fnm's default node and mise shims.
+PATH=@HOME@/.local/bin:@HOME@/.local/share/fnm/aliases/default/bin:@HOME@/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
+*/15 * * * * @DIR@/agent-runner >> @HOME@/.agent-runner/cron.log 2>&1

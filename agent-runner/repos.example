@@ -1,0 +1,8 @@
+# Copied to ~/.agent-runner/repos by install.sh (untracked: paths and secret
+# file names are machine-specific). One checkout per line:
+#
+#   <path to local checkout>  [untracked files to link into each worktree...]
+#
+# Globs expand relative to the checkout. Lines starting with # are ignored.
+
+~/myproject  .env .env.local

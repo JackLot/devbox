@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+# Picks up open GitHub issues labeled "agent", has Claude Code implement each one
+# in a git worktree of the local checkout, and opens a PR.
+#
+# Usage: agent-runner [--dry-run]
+# Runs from cron (see crontab -l).
+#
+# Label lifecycle on an issue:
+#   agent -> agent-wip (while running) -> agent-pr | agent-needs-human | agent-failed
+#
+# To continue after agent-needs-human, answer in an issue comment and re-add "agent".
+# Re-adding "agent" to an issue whose branch already exists resumes on that branch
+# (and updates its open PR), so it also works for follow-up changes.
+
+set -euo pipefail
+
+# Local checkouts to watch, one per line: "<path> [files to link into the worktree...]".
+# Linked files are untracked secrets/config that exist only in the main checkout;
+# globs expand relative to the checkout.
+# Config, logs and worktrees are machine-specific (and may contain secrets), so they all
+# live in one untracked directory outside the repo.
+STATE_DIR="${AGENT_RUNNER_HOME:-$HOME/.agent-runner}"
+CONFIG="$STATE_DIR/repos"
+WORKTREE_ROOT="$STATE_DIR/worktrees"
+LOG_DIR="$STATE_DIR/logs"
+
+# Issue labels. The trigger is the one you add by hand; the rest are created on the
+# first run and set by this script.
+LABEL_TRIGGER="agent"
+LABEL_WIP="agent-wip"
+LABEL_PR="agent-pr"
+LABEL_NEEDS_HUMAN="agent-needs-human"
+LABEL_FAILED="agent-failed"
+MAX_TURNS=200
+
+# Tools the agent may use without prompting. It can edit files and run the project's
+# tooling, but pushing and PR creation are done by this script, not the agent.
+ALLOWED_TOOLS=(
+  Read Edit Write Glob Grep TodoWrite
+  "Bash(npm *)" "Bash(npx *)" "Bash(node *)" "Bash(pnpm *)"
+  "Bash(python *)" "Bash(python3 *)" "Bash(pip *)" "Bash(uv *)" "Bash(pytest *)"
+  "Bash(ls *)" "Bash(cat *)" "Bash(head *)" "Bash(tail *)" "Bash(wc *)"
+  "Bash(find *)" "Bash(grep *)" "Bash(rg *)" "Bash(mkdir *)" "Bash(mv *)" "Bash(cp *)"
+  "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(git show*)"
+  "Bash(git add *)" "Bash(git commit *)"
+)
+
+# The agent's final answer. "needs_human" is for real blockers only (see the prompt).
+RESULT_SCHEMA='{
+  "type": "object",
+  "properties": {
+    "status": {"type": "string", "enum": ["done", "needs_human"]},
+    "summary": {"type": "string", "description": "What changed and how it was verified (markdown)"},
+    "decisions": {"type": "array", "items": {"type": "string"}, "description": "Judgment calls made where the issue was ambiguous"},
+    "question": {"type": "string", "description": "When needs_human: what is blocked and the specific question(s) to answer"}
+  },
+  "required": ["status", "summary"]
+}'
+
+# Commits and PRs carry no Claude attribution (no Co-Authored-By trailer, no
+# "Generated with Claude Code" line); commits are authored by this machine's git identity.
+CLAUDE_SETTINGS='{"attribution": {"commit": "", "pr": ""}, "includeCoAuthoredBy": false}'
+
+DRY_RUN=false
+[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
+
+mkdir -p "$WORKTREE_ROOT" "$LOG_DIR"
+
+# One run at a time; a long implementation shouldn't overlap the next tick.
+# Flock is a tool that handles concurrency and race conditions
+exec 9>"$STATE_DIR/lock"
+flock -n 9 || { echo "Another run is in progress, exiting."; exit 0; }
+
+log() { echo "[$(date '+%F %T')] $*"; }
+
+ensure_labels() {
+  local repo=$1
+  gh label create "$LABEL_WIP"         -R "$repo" --color FBCA04 --description "Agent is working on this" 2>/dev/null || true
+  gh label create "$LABEL_PR"          -R "$repo" --color 0E8A16 --description "Agent opened a PR" 2>/dev/null || true
+  gh label create "$LABEL_NEEDS_HUMAN" -R "$repo" --color 5319E7 --description "Agent is blocked on a question; answer, then re-add '$LABEL_TRIGGER'" 2>/dev/null || true
+  gh label create "$LABEL_FAILED"      -R "$repo" --color D93F0B --description "Agent run failed" 2>/dev/null || true
+}
+
+process_issue() {
+
+  # Take in the arguments and set variables
+  # $1 = first arg given, $2 = second arg given, etc.
+  local dir=$1 repo=$2 base=$3 links=$4 number=$5
+  local name branch wt logfile
+  name=$(basename "$dir")
+  branch="agent/issue-$number"
+  wt="$WORKTREE_ROOT/$name-$number"
+  logfile="$LOG_DIR/$name-$number-$(date +%Y%m%d-%H%M%S).json"
+
+  # Get the issue title, body, url and comments
+  local issue title
+  issue=$(gh issue view "$number" -R "$repo" --json title,body,url,comments \
+    --jq '"# \(.title)\n\(.url)\n\n\(.body)\n\n" + ([.comments[] | "## Comment by \(.author.login)\n\(.body)"] | join("\n\n"))')
+  title=$(gh issue view "$number" -R "$repo" --json title --jq .title)
+
+  # Fetch the latest origin/base branch
+  git -C "$dir" fetch --quiet origin
+
+  # Set the start branch to the origin/base branch
+  local start="origin/$base" resumed=false
+  if git -C "$dir" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+    start="origin/$branch" resumed=true
+  fi
+
+  # If the dry run flag is set, log the dry run message and return
+  # without actually doing anything
+  if $DRY_RUN; then
+    log "[dry-run] would implement $repo#$number: $title (branch $branch from $start)"
+    return
+  fi
+
+  # Add the $LABEL_WIP label to the issue and remove the trigger label
+  log "Picking up $repo#$number: $title (from $start)"
+  gh issue edit "$number" -R "$repo" --add-label "$LABEL_WIP" \
+    --remove-label "$LABEL_TRIGGER" --remove-label "$LABEL_NEEDS_HUMAN" --remove-label "$LABEL_FAILED" >/dev/null
+
+  # Define a function to finish the issue by removing the '$LABEL_WIP' label and
+  # adding the given label and commenting on the issue
+  finish() { # <label> <comment>
+    gh issue edit "$number" -R "$repo" --remove-label "$LABEL_WIP" --add-label "$1" >/dev/null
+    gh issue comment "$number" -R "$repo" --body "$2" >/dev/null
+    git -C "$dir" worktree remove --force "$wt" 2>/dev/null || true
+    git -C "$dir" branch -D "$branch" >/dev/null 2>&1 || true
+  }
+
+  # Remove the an already existing worktree if it exists
+  git -C "$dir" worktree remove --force "$wt" 2>/dev/null || true
+  
+  # Create a new worktree
+  # If the worktree creation fails, finish the issue by adding the '$LABEL_FAILED' label
+  if ! git -C "$dir" worktree add --quiet -B "$branch" "$wt" "$start"; then
+    finish "$LABEL_FAILED" "🤖 Couldn't create a worktree for \`$branch\` on the runner."
+    return 1
+  fi
+  git -C "$wt" branch --quiet --unset-upstream 2>/dev/null || true
+
+  # Link untracked secrets from the main checkout (globs expand relative to $dir).
+  # which secrets to symlink is defined in the CONFIG file
+  local pattern src rel
+  for pattern in $links; do
+    for src in "$dir"/$pattern; do
+      [[ -e "$src" ]] || continue
+      rel=${src#"$dir"/}
+      mkdir -p "$(dirname "$wt/$rel")"
+      ln -sf "$src" "$wt/$rel"
+    done
+  done
+
+  local resume_note=""
+  $resumed && resume_note="
+This branch already has earlier work on this issue (see git log). Continue from it; newer
+issue comments may answer questions from a previous run or ask for changes."
+
+  # Define the prompt passed to the implementing agent
+  local prompt
+  prompt="You are running unattended to implement a GitHub issue in this repository.
+Nobody is watching this session, so you can't ask questions mid-run.
+
+$issue
+$resume_note
+
+Instructions:
+- Read CLAUDE.md (if present) and the relevant code before changing anything.
+- Implement the change the issue asks for. Keep the change focused on the issue.
+- If dependencies aren't installed (e.g. no node_modules), install them first.
+- Run the relevant tests/build and fix failures you introduced.
+- Commit your work on the current branch with clear messages. Do not push; do not switch branches.
+- Never add Co-Authored-By trailers, "Generated with Claude Code" notes, or any other AI/Claude
+  attribution to commits, code, docs or your summary.
+- Do not commit secrets or files like .env (they are symlinks to the main checkout).
+
+Making decisions:
+- Bias strongly toward deciding and finishing. When the issue is ambiguous or leaves details
+  open (naming, copy, layout, which of several reasonable approaches, edge-case behavior),
+  pick the option most consistent with the existing code and the issue's intent, implement
+  it, and record it in \"decisions\" so the reviewer can push back on the PR. A reviewer
+  changing a decision later is cheap; a stalled issue is not.
+- Return status \"needs_human\" only as a last resort, when you truly cannot proceed
+  responsibly: the goal itself is unclear enough that any implementation is likely wrong,
+  it needs access/credentials/external setup you don't have, or it requires an
+  irreversible or high-risk choice (data deletion, breaking public APIs, security or billing
+  behavior) the issue doesn't settle.
+- If you return needs_human, commit any useful progress first, and put specific,
+  answerable questions in \"question\" (with your recommended answer where you have one).
+
+Your final response must match the output schema: \"summary\" becomes the PR description."
+
+  # Run the agent with the 'claude' CLI tool
+  local rc=0
+  (cd "$wt" && claude -p "$prompt" \
+      --allowedTools "${ALLOWED_TOOLS[@]}" \
+      --permission-mode acceptEdits \
+      --max-turns "$MAX_TURNS" \
+      --output-format json \
+      --json-schema "$RESULT_SCHEMA" \
+      --settings "$CLAUDE_SETTINGS") </dev/null >"$logfile" 2>&1 || rc=$?
+
+  # Parse the agent's response ('jq' is a CLI tool that parses JSON)
+  local status summary decisions question
+  status=$(jq -r '.structured_output.status // empty' "$logfile" 2>/dev/null || true)
+  summary=$(jq -r '.structured_output.summary // .result // empty' "$logfile" 2>/dev/null || true)
+  decisions=$(jq -r '.structured_output.decisions // [] | map("- " + .) | join("\n")' "$logfile" 2>/dev/null || true)
+  question=$(jq -r '.structured_output.question // empty' "$logfile" 2>/dev/null || true)
+  [[ -n "$decisions" ]] && decisions="
+**Decisions made** (push back on the PR if any are wrong):
+$decisions"
+
+  # Check if there are any commits on the branch,
+  # if there are, push them to the origin
+  local has_commits=false
+  [[ -n $(git -C "$wt" log --oneline "$start..HEAD" 2>/dev/null) ]] && has_commits=true
+  $has_commits && git -C "$wt" push --quiet origin "HEAD:refs/heads/$branch"
+
+  # If the agent run failed, finish the issue by adding the '$LABEL_FAILED' label
+  if (( rc != 0 )) || [[ -z "$status" ]]; then
+    log "Failed $repo#$number (exit $rc)"
+    finish "$LABEL_FAILED" "🤖 The agent run failed (exit code $rc).$($has_commits && echo " Partial work is on \`$branch\`.")
+
+Log on the runner: \`$logfile\`"
+  elif [[ "$status" == "needs_human" ]]; then
+    log "Needs human: $repo#$number"
+    finish "$LABEL_NEEDS_HUMAN" "🤖 **Blocked, needs your input.**
+
+${question:-$summary}
+$($has_commits && echo "
+Progress so far is on \`$branch\`.")
+Reply in a comment, then re-add the \`$LABEL_TRIGGER\` label to continue."
+  elif ! $has_commits; then
+    log "No commits: $repo#$number"
+    finish "$LABEL_FAILED" "🤖 The agent finished without committing anything.
+
+$summary"
+  else
+    local pr_url
+    pr_url=$(gh pr list -R "$repo" --head "$branch" --state open --json url --jq '.[0].url // empty')
+    if [[ -n "$pr_url" ]]; then
+      gh pr comment "$pr_url" --body "🤖 Pushed an update for #$number.
+
+$summary
+$decisions" >/dev/null
+    else
+      pr_url=$(gh pr create -R "$repo" --base "$base" --head "$branch" --title "$title" \
+        --body "Closes #$number
+
+$summary
+$decisions")
+    fi
+    log "PR: $pr_url"
+    finish "$LABEL_PR" "🤖 $($resumed && echo "Updated" || echo "Opened") $pr_url"
+  fi
+}
+
+[[ -f "$CONFIG" ]] || { echo "No config at $CONFIG (see repos.example)" >&2; exit 1; }
+
+
+# THE ACTUAL EXECUTION LOOP
+# ---------------------------------------------------------------------------------
+# It reads the CONFIG file line by line (each line is a repository),
+# and for each repository, it processes issues carrying the trigger label
+while read -r dir links <&3; do
+  [[ -z "$dir" || "$dir" == \#* ]] && continue
+  dir=${dir/#\~/$HOME}
+
+  repo=$(gh repo view "$(git -C "$dir" remote get-url origin)" --json nameWithOwner --jq .nameWithOwner)
+  base=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name)
+  $DRY_RUN || ensure_labels "$repo"
+
+  # Gets only issues still carrying the trigger label, and applies a label requiring
+  # triage/write access, so outsiders can't queue work.
+  mapfile -t numbers < <(gh issue list -R "$repo" --state open --label "$LABEL_TRIGGER" \
+    --json number,labels \
+    --jq ".[] | select([.labels[].name] | index(\"$LABEL_WIP\") | not) | .number")
+
+  (( ${#numbers[@]} )) || { log "$repo: no issues labeled '$LABEL_TRIGGER'"; continue; }
+
+  for n in "${numbers[@]}"; do
+    process_issue "$dir" "$repo" "$base" "$links" "$n" || log "Error processing $repo#$n"
+  done
+done 3< "$CONFIG"

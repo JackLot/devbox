@@ -6,4 +6,4 @@ Personal development environment configuration.
 |---|---|
 | [`ec2/`](ec2/) | Cloud devbox on AWS EC2: bootstrap, IAM, SSH/Tailscale, Cursor Remote-SSH, hibernate, laptop helper, launch checklist |
 | [`dotfiles/`](dotfiles/) | zsh, tmux and nvim config shared by the laptop and the devbox |
-| [`claude-issues/`](claude-issues/) | Cron job that has Claude Code implement GitHub issues labeled `claude` and open PRs |
+| [`agent-runner/`](agent-runner/) | Cron job that has Claude Code implement GitHub issues labeled `agent` and open PRs |
