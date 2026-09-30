@@ -330,6 +330,10 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
 @media (max-width: 760px) {
   .issues { display: none; }
   .issue-list { display: block; }
+  /* runner card head: "next run in ..." on its own line under the title, no copyable command */
+  .runner .card-head { flex-wrap: wrap; row-gap: 2px; }
+  .runner-next { flex-basis: 100%; margin-left: 0; }
+  #runnerStart:not([hidden]) { display: none; }
 }
 /* issue modal */
 dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
