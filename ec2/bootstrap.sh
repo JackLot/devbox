@@ -13,7 +13,7 @@ INSTANCE_NAME_TAG=devbox                       # must match iam/*.json and lapto
 TAILSCALE_HOSTNAME=devbox
 TAILSCALE_AUTHKEY_PARAM=/devbox/tailscale-authkey
 RUNTIME_SWAP_MB=2048                           # disk swap behind zram; ~RAM size
-DEFAULT_IDLE_MINUTES=30                        # override in /etc/devbox/idle.conf
+DEFAULT_IDLE_MINUTES=60                      # override in /etc/devbox/idle.conf
 DOTFILES_REPO=https://github.com/JackLot/devbox.git   # public; dotfiles/ linked for dev
 
 
@@ -265,7 +265,7 @@ chmod 755 /usr/lib/systemd/system-sleep/devbox-reconnect
 
 
 # ---- IDLE AUTO-HIBERNATE ----------------------------------------------------
-# Hibernates the box after IDLE_MINUTES (default 30) without activity.
+# Hibernates the box after IDLE_MINUTES (default 60) without activity.
 
 log "Installing idle auto-hibernate"
 
@@ -274,7 +274,9 @@ install -d -m 755 -o "$DEV_USER" -g "$DEV_USER" /var/lib/devbox-activity
 l=/var/log/devbox-idle.log   # dev appends too (dashboard Hibernate button)
 touch $l; chgrp "$DEV_USER" $l; chmod 664 $l
 
-# Written once; your later edits survive re-runs
+# Written once; your later edits survive re-runs. A window still at the old
+# 30-minute default moves to the new one.
+[[ -f /etc/devbox/idle.conf ]] && sed -i "s/^IDLE_MINUTES=30$/IDLE_MINUTES=$DEFAULT_IDLE_MINUTES/" /etc/devbox/idle.conf
 [[ -f /etc/devbox/idle.conf ]] || cat > /etc/devbox/idle.conf <<EOF
 # Minutes of continuous idleness before the box hibernates.
 IDLE_MINUTES=$DEFAULT_IDLE_MINUTES
@@ -290,7 +292,7 @@ cat > /usr/local/bin/devbox-idle-check <<'EOF'
 # Run every 5 min by devbox-idle.timer. Log: /var/log/devbox-idle.log + journal
 set -euo pipefail
 
-IDLE_MINUTES=30
+IDLE_MINUTES=60
 IDLE_HIBERNATE=on
 if [[ -r /etc/devbox/idle.conf ]]; then
   # shellcheck source=/dev/null
