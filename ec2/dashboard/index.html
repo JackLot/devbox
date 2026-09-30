@@ -98,6 +98,24 @@ header .meta b { font-weight: 500; color: var(--ink); }
 .log .t { color: var(--muted); }
 .log .hi { font-weight: 600; }
 .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.hib-tile { cursor: pointer; transition: border-color .15s; }
+.hib-tile:hover, .hib-tile:focus-visible { border-color: var(--s1); outline: none; }
+.hib-tile .label { display: flex; justify-content: space-between; gap: 8px; }
+.hib-tile .more { color: var(--muted); font-weight: 400; font-size: 12px; opacity: 0; transition: opacity .15s; }
+.hib-tile:hover .more, .hib-tile:focus-visible .more { opacity: 1; }
+@media (hover: none) { .hib-tile .more { opacity: 1; } }
+.hib-tile .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hib-tile .status { font-size: 12px; font-weight: 500; color: var(--ink); }
+.hib-tile .steps { max-width: none; }
+dialog.modal {
+  width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+}
+dialog.modal::backdrop { background: rgba(0,0,0,.4); }
+.modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.modal-head h2 { font-size: 16px; margin: 0; color: var(--ink); }
+.modal-head .theme { margin-left: auto; }
 
 /* tiles */
 .tile .label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
@@ -215,10 +233,13 @@ header .meta b { font-weight: 500; color: var(--ink); }
     </div>
   </header>
 
-  <section class="card" id="hibCard" hidden>
+  <dialog class="modal" id="hibModal" aria-labelledby="hibModalTitle">
+    <div class="modal-head">
+      <h2 id="hibModalTitle">Auto-hibernate</h2>
+      <button class="theme" id="hibClose" type="button">Close</button>
+    </div>
     <div class="hib">
       <div>
-        <h2>Auto-hibernate</h2>
         <div class="status" id="hibStatus"></div>
         <div class="hero" id="hibHero">–</div>
         <div class="sub" id="hibSub" style="color:var(--ink-2)"></div>
@@ -231,7 +252,7 @@ header .meta b { font-weight: 500; color: var(--ink); }
         <div class="note" id="logNote"></div>
       </div>
     </div>
-  </section>
+  </dialog>
 
   <section class="card sessions" id="claudeCard" hidden>
     <div class="card-head">
@@ -244,6 +265,13 @@ header .meta b { font-weight: 500; color: var(--ink); }
   </section>
 
   <section class="grid tiles">
+    <div class="card tile hib-tile" id="hibCard" role="button" tabindex="0" aria-haspopup="dialog" title="Show auto-hibernate details and log" hidden>
+      <div class="label">Auto-hibernate<span class="more">Details ›</span></div>
+      <div class="value" id="hibTileV">–</div>
+      <div class="sub" id="hibTileS"></div>
+      <div class="sub" id="hibTileSub"></div>
+      <div class="steps" id="hibTileSteps" aria-hidden="true"></div>
+    </div>
     <div class="card tile"><div class="label">CPU</div><div class="value" id="cpuV">–</div><div class="sub" id="cpuS"></div><div class="spark" id="cpuC"></div></div>
     <div class="card tile"><div class="label">Load (1 min)</div><div class="value" id="loadV">–</div><div class="sub" id="loadS"></div><div class="spark" id="loadC"></div></div>
     <div class="card tile"><div class="label">Memory</div><div class="value" id="memV">–</div><div class="sub" id="memS"></div><div class="spark" id="memC"></div></div>
@@ -565,7 +593,7 @@ let last = null, lastFetch = 0;
 function renderIdle(d) {
   const idle = d.idle;
   $("hibCard").hidden = !idle;
-  if (!idle) return;
+  if (!idle) { if ($("hibModal").open) $("hibModal").close(); return; }
   const now = Date.now() / 1000;
   let status, hero, sub;
   if (!idle.enabled) {
@@ -582,11 +610,18 @@ function renderIdle(d) {
     hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
     sub = "until hibernation · ";
   }
+  const steps = Array.from({ length: idle.needed }, (_, i) => `<span class="${i < idle.count ? "on" : ""}"></span>`).join("");
+  // Compact tile on the page; the modal repeats it with the facts and log.
+  $("hibTileV").textContent = hero;
+  $("hibTileS").innerHTML = `<span class="status">${status}</span>`;
+  $("hibTileS").title = $("hibTileS").textContent.trim();
+  $("hibTileSub").innerHTML = esc(sub) + (idle.enabled ? '<span class="liveNext"></span>' : "");
+  $("hibTileSteps").innerHTML = steps;
   $("hibStatus").innerHTML = status;
   $("hibHero").textContent = hero;
   // The idle-check countdown ticks live (tickLive); everything else is per-minute.
-  $("hibSub").innerHTML = esc(sub) + (idle.enabled ? '<span id="liveNext"></span>' : "");
-  $("hibSteps").innerHTML = Array.from({ length: idle.needed }, (_, i) => `<span class="${i < idle.count ? "on" : ""}"></span>`).join("");
+  $("hibSub").innerHTML = esc(sub) + (idle.enabled ? '<span class="liveNext"></span>' : "");
+  $("hibSteps").innerHTML = steps;
 
   const host = d.host;
   const facts = [
@@ -601,10 +636,27 @@ function renderIdle(d) {
   tickLive();
 }
 
+const hibModal = $("hibModal");
+function openHibModal() {
+  hibModal.showModal();
+  $("log").scrollTop = $("log").scrollHeight;
+}
+$("hibCard").onclick = openHibModal;
+$("hibCard").onkeydown = e => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openHibModal(); }
+};
+$("hibClose").onclick = () => hibModal.close();
+// Click on the backdrop (outside the dialog box) closes it.
+hibModal.onclick = e => {
+  const r = hibModal.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) hibModal.close();
+};
+
 function tickLive() {
   const idle = last && last.idle, now = Date.now() / 1000;
   if (!idle) return;
-  if ($("liveNext")) $("liveNext").textContent = idle.next_check ? "idle check in " + durSec(idle.next_check - now) : "idle check pending";
+  const next = idle.next_check ? "idle check in " + durSec(idle.next_check - now) : "idle check pending";
+  document.querySelectorAll(".liveNext").forEach(el => el.textContent = next);
   if ($("liveBeat")) $("liveBeat").textContent = idle.heartbeat ? durSec(now - idle.heartbeat) + " ago" : "never";
 }
 
@@ -716,7 +768,6 @@ function startPolling() {
 function stopPolling() { timers.forEach(clearInterval); timers = []; }
 document.addEventListener("visibilitychange", () => document.hidden ? stopPolling() : startPolling());
 startPolling();
-setTimeout(() => { $("log").scrollTop = $("log").scrollHeight; }, 1500);
 </script>
 </body>
 </html>
