@@ -17,15 +17,17 @@ Read this before starting; add to it when you learn something a future run would
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the
-  summary with a single copy-paste command that runs the dashboard from your worktree on port
-  9998, next to the real one on 9999:
+  summary with a single copy-paste command, run from the **laptop** (macOS) terminal, that
+  starts the dashboard from your worktree on port 9998 (next to the real one on 9999) over
+  `ssh devbox` and then opens it in a new browser tab (the reviewer asked for the auto-open):
 
   ```bash
-  nohup python3 ~/.agent-runner/worktrees/devbox-<N>/ec2/dashboard/server.py --port 9998 > /tmp/devbox-dashboard-issue<N>.log 2>&1 < /dev/null & disown
+  ssh devbox "nohup python3 ~/.agent-runner/worktrees/devbox-<N>/ec2/dashboard/server.py --port 9998 > /tmp/devbox-dashboard-issue<N>.log 2>&1 < /dev/null &" && sleep 1 && open http://devbox:9998
   ```
 
   The code block must hold only that command (the reviewer copies it with the copy button
-  and pastes it straight into a terminal; a `#` comment line breaks that). Put the URL
-  (http://devbox:9998) and the stop command (`pkill -f 'server.py --port 9998'`) in prose
-  or their own code blocks. Use your actual worktree path (your working directory); it stays in place until the issue
+  and pastes it straight into a terminal; a `#` comment line breaks that). Put the stop
+  command (`ssh devbox "pkill -f 'server.py --port 9998'"`) in prose or its own code block.
+  Use your actual worktree path (your working directory); it stays in place until the issue
   is closed. Warn that the test dashboard's **Hibernate now** and Stop buttons are live.
+  You can't run `ssh devbox` or `open` from the runner, so this command can't be tested here.
