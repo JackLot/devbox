@@ -13,6 +13,8 @@ Read this before starting; add to it when you learn something a future run would
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
   and run `node --check` on it.
+- There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
+  CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 
 ## Letting the reviewer check your change
 
