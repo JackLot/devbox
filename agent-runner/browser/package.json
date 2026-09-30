@@ -1,0 +1,9 @@
+{
+  "name": "agent-runner-browser",
+  "private": true,
+  "description": "Headless-browser check for runner agents (see check.mjs)",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

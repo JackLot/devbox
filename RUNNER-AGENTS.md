@@ -18,8 +18,12 @@ Read this before starting; add to it when you learn something a future run would
   snapshot saved from `server.Sampler().get()` (sample twice, a second apart). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
   make the stub element's `querySelector` return an object, or `spark()` throws.
-- There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
-  CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
+- For visual checks, use the runner's headless-browser helper (the prompt gives its path;
+  `--help` for options), not a hand-rolled Playwright script: it runs the server in the
+  foreground and stops it, which the no-background rule needs. For the dashboard:
+  `--cmd "python3 ec2/dashboard/server.py --port 9987" --url http://localhost:9987/`. Pick a
+  port other than 9998/9999. Read the PNGs before claiming a layout works. The helper blocks
+  other local/tailnet hosts, so a page can't hit the real dashboard's Stop/Hibernate endpoints.
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
   copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `index.html`).
   Inside a `showModal()` dialog the rest of the page is inert, so that fallback's textarea

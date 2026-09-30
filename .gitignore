@@ -8,3 +8,6 @@ conf.d/
 
 # Python bytecode
 __pycache__/
+
+# Playwright for agent-runner/browser (installed by agent-runner/install.sh)
+node_modules/

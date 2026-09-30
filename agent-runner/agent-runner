@@ -23,6 +23,9 @@ set -euo pipefail
 # Config, logs and worktrees are machine-specific (and may contain secrets), so they all
 # live in one untracked directory outside the repo.
 STATE_DIR="${AGENT_RUNNER_HOME:-$HOME/.agent-runner}"
+# Headless-browser check agents run for UI changes (browser/check.mjs, set up by install.sh).
+# Resolved through the ~/bin symlink so the prompt can give agents a literal path.
+BROWSER_CHECK="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)/browser/check.mjs"
 CONFIG="$STATE_DIR/repos"
 WORKTREE_ROOT="$STATE_DIR/worktrees"
 LOG_DIR="$STATE_DIR/logs"
@@ -189,6 +192,11 @@ Instructions:
 - Implement the change the issue asks for. Keep the change focused on the issue.
 - If dependencies aren't installed (e.g. no node_modules), install them first.
 - Run the relevant tests/build and fix failures you introduced.
+- For changes that affect a web page (layout, CSS, UI behavior), look at the result in a
+  headless browser before calling it done: node $BROWSER_CHECK --help
+  shows how. It starts the dev server, screenshots each viewport width, reports console
+  errors, and stops the server. Open the screenshots with the Read tool and fix what looks
+  wrong. Say in the summary which widths you checked and what you saw.
 - Commit your work on the current branch with clear messages. Do not push; do not switch branches.
 - Never add Co-Authored-By trailers, "Generated with Claude Code" notes, or any other AI/Claude
   attribution to commits, code, docs or your summary.
