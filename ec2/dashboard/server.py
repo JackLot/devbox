@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""devbox dashboard: processes, resources and auto-hibernate state.
+"""devbox dashboard: processes, resources, auto-hibernate and agent-runner state.
 
 Stdlib only; reads /proc directly, so it runs on any Linux box with python3.
 Sections that don't apply (no idle checker, no IMDS) come back as null.
@@ -545,6 +545,246 @@ def claude_sessions(procs, rows):
     return out
 
 
+# ---- agent runner -------------------------------------------------------------
+# agent-runner (../../agent-runner) keeps its state in ~/.agent-runner: a lock
+# held while a run is in progress, cron.log, one JSON log per issue run
+# (<repo>-<N>-<YYYYmmdd-HHMMSS>.json, empty until the run ends) and a worktree
+# per open issue. The run's Claude session is also in the Claude sessions card;
+# here it's matched by cwd to show what the current run is doing.
+
+RUNNER_HOME = os.environ.get("AGENT_RUNNER_HOME") or os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".agent-runner")
+RUNNER_RUNS = 10
+RUNNER_LOG_LINES = 80
+RUNNER_CONF_TTL = 60
+_runner_runs = {}  # log path -> (mtime, size, run)
+_runner_titles = {}  # session id -> title; it never changes
+_runner_conf = {"time": 0}
+
+
+def lock_holder(path):
+    """Pid holding a flock on path (as /proc/locks reports it), or None. Reads
+    /proc/locks instead of trying the lock, which could make a cron tick skip."""
+    st = os.stat(path)
+    key = "%02x:%02x:%d" % (os.major(st.st_dev), os.minor(st.st_dev), st.st_ino)
+    for line in read("/proc/locks").splitlines():
+        f = line.split()
+        if "->" not in f and len(f) > 5 and f[5] == key:  # "->" marks a blocked waiter
+            return int(f[4])
+    return None
+
+
+_CRON_MACROS = {"@hourly": "0 * * * *", "@daily": "0 0 * * *", "@midnight": "0 0 * * *",
+                "@weekly": "0 0 * * 0", "@monthly": "0 0 1 * *", "@yearly": "0 0 1 1 *",
+                "@annually": "0 0 1 1 *"}
+
+
+def cron_field(spec, lo, hi):
+    vals = set()
+    for part in spec.split(","):
+        rng, _, step = part.partition("/")
+        if rng == "*":
+            a, b = lo, hi
+        elif "-" in rng:
+            a, b = (int(x) for x in rng.split("-"))
+        else:
+            a = b = int(rng)
+            if step:
+                b = hi
+        vals.update(range(a, b + 1, int(step or 1)))
+    return vals
+
+
+def cron_next(expr, now):
+    """Next time (local, as cron uses) a numeric 5-field schedule fires, or None."""
+    f = _CRON_MACROS.get(expr, expr).split()
+    mins, hours, dom, mon, dow = (cron_field(f[i], lo, hi) for i, (lo, hi) in
+                                  enumerate(((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))))
+    if 7 in dow:
+        dow.add(0)
+    t = (int(now) // 60 + 1) * 60
+    for _ in range(8 * 24 * 60):
+        tm = time.localtime(t)
+        # When both day fields are restricted, cron fires on either
+        day_dom, day_dow = tm.tm_mday in dom, (tm.tm_wday + 1) % 7 in dow
+        if f[2] != "*" and f[4] != "*":
+            day = day_dom or day_dow
+        else:
+            day = day_dom and day_dow
+        if tm.tm_min in mins and tm.tm_hour in hours and tm.tm_mon in mon and day:
+            return t
+        t += 60
+    return None
+
+
+def runner_conf():
+    """Cron schedule and repo slugs; they rarely change, so read once a minute."""
+    if time.time() - _runner_conf["time"] < RUNNER_CONF_TTL:
+        return _runner_conf
+    schedule = None
+    crontab = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=2).stdout
+    for line in crontab.splitlines():
+        line = line.strip()
+        if "agent-runner" in line and not line.startswith("#") and not line.startswith("PATH="):
+            f = line.split()
+            schedule = f[0] if f[0].startswith("@") else " ".join(f[:5])
+            break
+    # <checkout name> -> owner/repo, from each watched checkout's origin remote
+    repos = {}
+    for line in (safe(read, os.path.join(RUNNER_HOME, "repos")) or "").splitlines():
+        f = line.split()
+        if not f or f[0].startswith("#"):
+            continue
+        d = os.path.expanduser(f[0])
+        url = safe(lambda: re.search(r'\[remote "origin"\][^\[]*?url\s*=\s*(\S+)',
+                                     read(os.path.join(d, ".git", "config"))).group(1))
+        m = url and re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+        if m:
+            repos[os.path.basename(d.rstrip("/"))] = m.group(1)
+    _runner_conf.update(time=time.time(), schedule=schedule, repos=repos)
+    return _runner_conf
+
+
+def session_title(session_id):
+    """The --name the runner gave the session ("Issue #7 - title"), from the
+    first lines of its transcript."""
+    if session_id in _runner_titles:
+        return _runner_titles[session_id]
+    title = None
+    path = find_transcript(session_id)
+    if path:
+        with open(path, "rb") as f:
+            for n, raw in enumerate(f):
+                if n > 50:
+                    break
+                d = safe(json.loads, raw) or {}
+                if d.get("type") == "custom-title" and d.get("customTitle"):
+                    title = d["customTitle"]
+                    break
+    _runner_titles[session_id] = title
+    return title
+
+
+def issue_title(name):
+    return re.sub(r"^Issue #\d+ - ", "", name) if name else None
+
+
+def runner_run(path):
+    st = os.stat(path)
+    cached = _runner_runs.get(path)
+    if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+        return dict(cached[2])
+    m = re.match(r"(.+)-(\d+)-(\d{8}-\d{6})\.json$", os.path.basename(path))
+    if not m:
+        return None
+    run = {"repo": m.group(1), "issue": int(m.group(2)), "log": path,
+           "started": time.mktime(time.strptime(m.group(3), "%Y%m%d-%H%M%S")),
+           "ended": None, "status": "pending", "title": None, "summary": None}
+    if st.st_size:
+        run["ended"] = st.st_mtime
+        try:
+            d = json.loads(read(path))
+        except ValueError:  # claude failed before printing its JSON
+            d = {}
+        out = d.get("structured_output") or {}
+        run["status"] = out.get("status") or "failed"
+        text = out.get("question") if run["status"] == "needs_human" else out.get("summary")
+        if run["status"] == "failed" and not text:
+            text = d.get("result") or safe(lambda: read(path)[:300])
+        run["summary"] = _plain(text or "")[:400] or None
+        run["cost"] = d.get("total_cost_usd")
+        run["turns"] = d.get("num_turns")
+        if d.get("duration_ms"):
+            run["ended"] = run["started"] + d["duration_ms"] / 1000
+        if d.get("session_id"):
+            run["title"] = issue_title(safe(session_title, d["session_id"]))
+    _runner_runs[path] = (st.st_mtime, st.st_size, run)
+    return dict(run)
+
+
+def runner_worktree(path):
+    gitdir = read(os.path.join(path, ".git")).strip()[len("gitdir: "):]
+    ref = read(os.path.join(gitdir, "HEAD")).strip()
+    activity = max(safe(os.path.getmtime, os.path.join(gitdir, p)) or 0
+                   for p in ("HEAD", "index", "logs/HEAD"))
+    m = re.match(r"(.+)-(\d+)$", os.path.basename(path))
+    return {"name": os.path.basename(path), "path": path,
+            "repo": m.group(1) if m else None, "issue": int(m.group(2)) if m else None,
+            "branch": ref[16:] if ref.startswith("ref: refs/heads/") else ref[:12],
+            "activity": activity or None}
+
+
+def agent_runner(sessions):
+    if not os.path.isdir(RUNNER_HOME):
+        return None
+    now = time.time()
+    conf = runner_conf()
+    lock = os.path.join(RUNNER_HOME, "lock")
+    holder = safe(lock_holder, lock) if os.path.exists(lock) else None
+
+    log_dir = os.path.join(RUNNER_HOME, "logs")
+    paths = sorted((os.path.join(log_dir, n) for n in safe(os.listdir, log_dir) or [] if n.endswith(".json")),
+                   key=lambda p: os.path.basename(p).rsplit("-", 2)[-2:], reverse=True)
+    runs = [r for r in (safe(runner_run, p) for p in paths[:RUNNER_RUNS]) if r]
+    wt_root = os.path.join(RUNNER_HOME, "worktrees")
+    by_cwd = {s["cwd"]: s for s in sessions or [] if s.get("cwd")}
+    current = None
+    for r in runs:
+        if r["status"] != "pending":
+            continue
+        # An empty log is the run in progress while the lock is held; one
+        # left behind by an older run means that run was killed.
+        if holder and current is None:
+            r["status"], current = "running", r
+            s = by_cwd.get(os.path.join(wt_root, "%s-%d" % (r["repo"], r["issue"])))
+            if s:
+                r["title"] = issue_title(s.get("name")) or s.get("title")
+                r["session"] = {k: s.get(k) for k in ("pid", "status", "waiting_for", "action", "reply", "start")}
+        else:
+            r["status"] = "interrupted"
+    # Runs that failed early have no session to take a title from; borrow one
+    # from another run of the same issue.
+    titles = {(r["repo"], r["issue"]): r["title"] for r in reversed(runs) if r["title"]}
+    last_run = {}
+    for r in runs:
+        repo = conf["repos"].get(r["repo"])
+        r["url"] = "https://github.com/%s/issues/%d" % (repo, r["issue"]) if repo else None
+        r["title"] = r["title"] or titles.get((r["repo"], r["issue"]))
+        last_run.setdefault((r["repo"], r["issue"]), r)
+
+    worktrees = []
+    for name in sorted(safe(os.listdir, wt_root) or []):
+        w = safe(runner_worktree, os.path.join(wt_root, name))
+        if w:
+            repo = conf["repos"].get(w["repo"])
+            w["url"] = "https://github.com/%s/issues/%d" % (repo, w["issue"]) if repo and w["issue"] else None
+            r = last_run.get((w["repo"], w["issue"]))
+            w["title"], w["last_status"] = (r["title"], r["status"]) if r else (None, None)
+            worktrees.append(w)
+    worktrees.sort(key=lambda w: -(w["activity"] or 0))
+
+    cron_log = os.path.join(RUNNER_HOME, "cron.log")
+    lines = safe(tail, cron_log, RUNNER_LOG_LINES)
+    last_tick = None
+    for line in reversed(lines or []):
+        m = re.match(r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\]", line)
+        if m:
+            last_tick = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+            break
+
+    return {
+        "home": RUNNER_HOME,
+        "running": holder is not None,
+        "holder": holder,
+        "current": current,
+        "schedule": conf["schedule"],
+        "next_run": safe(cron_next, conf["schedule"], now) if conf["schedule"] else None,
+        "last_log_line": last_tick,
+        "runs": runs,
+        "worktrees": worktrees,
+        "log": {"path": cron_log, "available": lines is not None, "lines": lines or []},
+    }
+
+
 # ---- instance metadata --------------------------------------------------------
 
 def imds():
@@ -651,6 +891,7 @@ class Sampler:
 
         self._prev = {"time": now, "cpu": cpu, "net": net,
                       "ticks": {pid: p["ticks"] for pid, p in procs.items()}}
+        claude = safe(claude_sessions, procs, rows)
 
         snap = {
             "time": now,
@@ -666,7 +907,8 @@ class Sampler:
             "processes": {"count": len(procs), "top_cpu": top_cpu, "top_mem": top_mem},
             "ports": safe(listening, procs),
             "idle": safe(idle_state),
-            "claude": safe(claude_sessions, procs, rows),
+            "claude": claude,
+            "runner": safe(agent_runner, claude),
         }
         with self.lock:
             if cpu_pct is not None:

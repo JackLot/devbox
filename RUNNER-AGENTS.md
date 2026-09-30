@@ -12,8 +12,11 @@ Read this before starting; add to it when you learn something a future run would
   simple_expansion"), even inside a quoted heredoc. That bites `index.html` edits, where the JS
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
-  and run `node --check` on it.
-
+  and run `node --check` on it. To catch runtime errors too, `eval` that script in `node -e`
+  with stubbed `document`/`localStorage`/`fetch`/`setInterval` and call `render()` on a
+  snapshot saved from `server.Sampler().get()` (sample twice, a second apart).
+- Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
+  `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the

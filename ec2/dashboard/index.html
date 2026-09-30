@@ -209,6 +209,7 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .dot.waiting { background: var(--warning); }
 .dot.idle { background: var(--muted); }
 .dot.stopped { background: var(--critical); }
+.dot.good { background: var(--good); }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
 @media (max-width: 560px) { .sess .top { flex-wrap: wrap; } .sess .sep { display: none; } .sess .where { flex-basis: 100%; order: 3; } }
@@ -219,6 +220,19 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .hib-btn:hover { filter: brightness(1.1); }
 .hib-btn:disabled { opacity: .6; cursor: default; }
 .banner { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+/* agent runner */
+.runner-next { margin-left: auto; color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.runner-now { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; padding-bottom: 12px; border-bottom: 1px solid var(--grid); }
+.runner-now .sep { color: var(--muted); }
+.runner-now a { color: inherit; white-space: nowrap; }
+.runner-now .ttl { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runner-now .d { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.runner h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 14px 0 4px; }
+.runner .tbl a { color: inherit; }
+.runner .tbl .chip { font-size: 12px; }
+.runner .dim { color: var(--muted); }
+.runner .log { height: 200px; }
+.runner .two { gap: 20px; }
 .theme { background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -278,7 +292,21 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
     <div class="card tile"><div class="label">Memory</div><div class="value" id="memV">–</div><div class="sub" id="memS"></div><div class="spark" id="memC"></div></div>
   </section>
 
-  <section class="grid two">
+  <section class="card runner" id="runnerCard" hidden>
+    <div class="card-head">
+      <h2>Agent runner</h2>
+      <span class="runner-next" id="runnerNext"></span>
+    </div>
+    <div class="runner-now" id="runnerNow"></div>
+    <h3>Recent runs<span id="runnerRunsNote"></span></h3>
+    <div class="scroll" id="runnerRuns"></div>
+    <div class="grid two">
+      <div><h3 id="runnerWtTitle">Worktrees</h3><div class="scroll" id="runnerWt"></div></div>
+      <div><h3>cron.log</h3><pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div></div>
+    </div>
+  </section>
+
+  <section class="grid two section">
     <div class="card"><h2>Disks</h2><div id="disks"></div></div>
     <div class="card"><h2>Swap</h2><div id="swap"></div></div>
   </section>
@@ -586,6 +614,78 @@ function renderClaude(d) {
   }).join("");
 }
 
+// Agent runner: the run's outcome as the agent reported it ("done" means a PR
+// was opened or updated, unless it made no commits; see the issue comment).
+const RUN_STATUS = {
+  running: ["busy", "Running"], done: ["good", "Done"], needs_human: ["waiting", "Needs you"],
+  failed: ["stopped", "Failed"], interrupted: ["stopped", "Interrupted"],
+};
+function runChip(status) {
+  const [dot, label] = RUN_STATUS[status] || ["idle", status || "–"];
+  return `<span class="chip"><span class="dot ${dot}" aria-hidden="true"></span>${esc(label)}</span>`;
+}
+const issueLink = x => {
+  const label = `${x.repo}#${x.issue}`;
+  return x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
+};
+
+function renderRunner(d) {
+  const r = d.runner;
+  $("runnerCard").hidden = !r;
+  if (!r) return;
+  const now = Date.now() / 1000, cur = r.current;
+  const n = st => r.runs.filter(x => x.status === st).length;
+  $("runnerRunsNote").textContent = [["done", "done"], ["needs_human", "need you"], ["failed", "failed"], ["interrupted", "interrupted"]]
+    .map(([st, word]) => n(st) && ` · ${n(st)} ${word}`).filter(Boolean).join("");
+
+  if (cur) {
+    const s = cur.session;
+    const detail = s ? `${STATUS[s.status] || s.status}${sessionDetail(s) ? " · " + sessionDetail(s) : ""}` : "";
+    $("runnerNow").innerHTML = `${runChip("running")}<span class="sep">•</span>${issueLink(cur)}
+      <span class="ttl" title="${esc(cur.title || "")}">${esc(cur.title || "")}</span>
+      <span class="d" title="${esc(detail)}">${detail ? "· " + esc(detail) : ""}</span>
+      <span class="dim" id="runnerElapsed"></span>`;
+  } else if (r.running) {
+    $("runnerNow").innerHTML = `${runChip("running")}<span class="d">checking for issues labeled <b>agent</b></span>`;
+  } else {
+    $("runnerNow").innerHTML = `<span class="chip"><span class="dot idle" aria-hidden="true"></span>Idle</span>
+      <span class="d">${r.last_log_line ? "last logged " + dur(now - r.last_log_line) + " ago" : ""}</span>`;
+  }
+
+  $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl"><colgroup><col style="width:120px"><col style="width:30%"><col style="width:112px"><col style="width:64px"><col style="width:64px"><col></colgroup>
+    <thead><tr><th>Started</th><th>Issue</th><th>Outcome</th><th class="num">Took</th><th class="num">Cost</th><th>Summary</th></tr></thead><tbody>` +
+    r.runs.map(x => `<tr title="log: ${esc(x.log)}${x.turns ? " · " + x.turns + " turns" : ""}">
+      <td>${clock(x.started)}</td>
+      <td title="${esc(x.title || "")}">${issueLink(x)} ${esc(x.title || "")}</td>
+      <td>${runChip(x.status)}</td>
+      <td class="num">${x.ended ? dur(x.ended - x.started) : x.status === "running" ? '<span class="liveRun"></span>' : "–"}</td>
+      <td class="num">${x.cost != null ? "$" + x.cost.toFixed(2) : "–"}</td>
+      <td title="${esc(x.summary || "")}">${esc(x.summary || "")}</td></tr>`).join("") +
+    "</tbody></table>" : '<div class="note">No runs yet</div>';
+
+  const wt = r.worktrees;
+  $("runnerWtTitle").textContent = `Worktrees (${wt.length})`;
+  $("runnerWt").innerHTML = wt.length ? `<table class="tbl"><colgroup><col style="width:34%"><col><col style="width:84px"></colgroup>
+    <thead><tr><th>Issue</th><th>Last run</th><th class="num">Touched</th></tr></thead><tbody>` +
+    wt.map(w => `<tr title="${esc(w.path)} · ${esc(w.branch)}">
+      <td title="${esc(w.title || "")}">${w.issue ? issueLink(w) : esc(w.name)} <span class="dim">${esc(w.title || "")}</span></td>
+      <td>${w.last_status ? runChip(w.last_status) : '<span class="dim">–</span>'}</td>
+      <td class="num">${w.activity ? dur(now - w.activity) + " ago" : "–"}</td></tr>`).join("") +
+    "</tbody></table>" : '<div class="note">None; each is removed once its issue is closed</div>';
+
+  const el = $("runnerLog");
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  el.innerHTML = r.log.lines.map(l => {
+    const m = /^\[(\d{4}-\d\d-\d\d) (\d\d:\d\d):\d\d\] (.*)$/.exec(l);
+    if (!m) return `<span class="t">${esc(l)}</span>`;
+    const cls = /^(Picking up|PR:|Failed|Needs human|No commits|Error|Replied)/.test(m[3]) ? ' class="hi"' : "";
+    return `<span class="t">${m[1].slice(5)} ${m[2]}</span>  <span${cls}>${esc(m[3])}</span>`;
+  }).join("\n");
+  $("runnerLogNote").textContent = r.log.available ? r.log.path + " · newest last" : r.log.path + " not found yet";
+  if (atBottom) el.scrollTop = el.scrollHeight;
+  tickLive();
+}
+
 let last = null, lastFetch = 0;
 
 function renderIdle(d) {
@@ -653,6 +753,14 @@ hibModal.onclick = e => {
 
 function tickLive() {
   const idle = last && last.idle, now = Date.now() / 1000;
+  const r = last && last.runner;
+  if (r) {
+    $("runnerNext").textContent = r.next_run ? `next run in ${durSec(r.next_run - now)} · ${r.schedule}`
+      : r.schedule ? r.schedule : "no cron entry";
+    const run = r.current ? durSec(now - r.current.started) : "";
+    document.querySelectorAll(".liveRun").forEach(el => el.textContent = run);
+    if ($("runnerElapsed")) $("runnerElapsed").textContent = run;
+  }
   if (!idle) return;
   const next = idle.next_check ? "idle check in " + durSec(idle.next_check - now) : "idle check pending";
   document.querySelectorAll(".liveNext").forEach(el => el.textContent = next);
@@ -679,6 +787,7 @@ function render(d) {
   // Only on an EC2 devbox (idle checker + instance metadata present)
   $("hibBtn").hidden = !(d.idle && h.instance && h.instance.instance_id);
   renderClaude(d);
+  renderRunner(d);
 
   const hist = d.history.rows, T = hist.map(r => r[0]);
   const col = i => hist.map(r => r[i]);
