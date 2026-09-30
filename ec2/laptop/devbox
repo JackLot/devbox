@@ -16,7 +16,7 @@ set -euo pipefail
 
 export AWS_PROFILE=${AWS_PROFILE:-devbox}
 NAME=${DEVBOX_NAME:-devbox}
-SSH_WAIT_SECONDS=${DEVBOX_SSH_WAIT_SECONDS:-180}
+SSH_WAIT_SECONDS=${DEVBOX_SSH_WAIT_SECONDS:-300}
 
 # stdout is the SSH byte stream in proxy mode, so all messages go to stderr
 log() { echo "devbox: $*" >&2; }
@@ -72,11 +72,14 @@ up() {
 
 wait_for_port() {
   local host=$1 port=$2 deadline=$((SECONDS + SSH_WAIT_SECONDS))
-  log "waiting for $host:$port"
+  local start=$SECONDS next=30
+  log "waiting for $host:$port (after hibernation, Tailscale needs a moment to reconnect)"
   until nc -z -G 3 "$host" "$port" 2>/dev/null; do
-    (( SECONDS < deadline )) || die "$host:$port not reachable after ${SSH_WAIT_SECONDS}s"
+    (( SECONDS < deadline )) || die "$host:$port not reachable after ${SSH_WAIT_SECONDS}s (check: tailscale status | grep $host)"
+    if (( SECONDS - start >= next )); then log "still waiting ($((SECONDS - start))s)"; next=$((next + 30)); fi
     sleep 2
   done
+  log "$host:$port reachable after $((SECONDS - start))s"
 }
 
 case ${1:-} in

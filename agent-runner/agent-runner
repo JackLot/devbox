@@ -134,6 +134,12 @@ process_issue() {
   # Reuse it if it exists, reset to the pushed branch; otherwise create it.
   # If that fails, finish the issue by adding the '$LABEL_FAILED' label
   git -C "$dir" worktree prune
+  # A worktree whose metadata in $dir/.git/worktrees is gone (e.g. .git was replaced
+  # by a copy from another machine) is no longer a checkout; remove it so it's recreated.
+  if [[ -d "$wt" ]] && [[ $(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) != "$(cd "$wt" && pwd -P)" ]]; then
+    log "Worktree $wt is orphaned, recreating it"
+    rm -rf "$wt"
+  fi
   if [[ -d "$wt" ]]; then
     if ! git -C "$wt" reset --quiet --hard "$start"; then
       finish "$LABEL_FAILED" "🤖 Couldn't reset the worktree \`$wt\` to \`$start\` on the runner."
@@ -215,7 +221,7 @@ EOF
   # Run the agent with the 'claude' CLI tool
   local rc=0
   (cd "$wt" && claude -p "$prompt" \
-      --name "Issue #$number - $title" \
+      --name "$name#$number - $title" \
       --allowedTools "${ALLOWED_TOOLS[@]}" \
       --permission-mode acceptEdits \
       --max-turns "$MAX_TURNS" \

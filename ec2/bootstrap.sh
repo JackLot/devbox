@@ -43,9 +43,9 @@ log "Preflight"
 command -v aws >/dev/null || { echo "aws CLI missing (use the standard AL2023 AMI, not minimal)"; exit 1; }
 systemctl is-enabled --quiet amazon-ssm-agent || warn "amazon-ssm-agent is not enabled"
 [[ "$(md hibernation/configured || true)" == true ]] \
-  || warn "hibernation is NOT configured for this instance; auto-hibernate will fail. Relaunch with --hibernation-options Configured=true"
+  || warn "hibernation not configured; relaunch with --hibernation-options Configured=true"
 [[ "$(md tags/instance/Name || true)" == "$INSTANCE_NAME_TAG" ]] \
-  || warn "instance Name tag is not '$INSTANCE_NAME_TAG' (or instance metadata tags are disabled); auto-hibernate IAM and laptop 'devbox' CLI lookup will fail. Tag Name=$INSTANCE_NAME_TAG and set InstanceMetadataTags=enabled"
+  || warn "Name tag isn't '$INSTANCE_NAME_TAG' (or metadata tags off): self-hibernate + laptop helper will fail"
 REGION=$(md placement/region)
 
 
@@ -129,9 +129,7 @@ ClientAliveCountMax 3
 KexAlgorithms mlkem768x25519-sha256,sntrup761x25519-sha512,curve25519-sha256
 EOF
 
-# Validate, reload, then confirm the drop-in actually took effect.
-# Output is captured before matching: under pipefail, `cmd | grep -q` fails
-# at random when grep exits early and cmd dies of SIGPIPE.
+# Validate, reload, confirm. Captured, not `cmd | grep -q` (SIGPIPE race under pipefail).
 sshd -t
 systemctl reload sshd
 sshd_effective=$(sshd -T)
@@ -167,7 +165,6 @@ table inet devbox {
 }
 EOF
 
-# Loads the ruleset at boot
 cat > /etc/systemd/system/devbox-firewall.service <<'EOF'
 [Unit]
 Description=devbox host firewall
@@ -256,6 +253,15 @@ else
   warn "can't read $TAILSCALE_AUTHKEY_PARAM; join over SSM: sudo tailscale up --accept-dns=false"
 fi
 
+# On wake from hibernation the public IP is new and connections are stale:
+# reconnect Tailscale + SSM now instead of minutes later (SSH waited ~2+ min).
+cat > /usr/lib/systemd/system-sleep/devbox-reconnect <<'EOF'
+#!/bin/sh
+[ "$1" = post ] && systemctl --no-block restart tailscaled amazon-ssm-agent
+exit 0
+EOF
+chmod 755 /usr/lib/systemd/system-sleep/devbox-reconnect
+
 
 
 # ---- IDLE AUTO-HIBERNATE ----------------------------------------------------
@@ -301,13 +307,11 @@ idle_checks=$(( (IDLE_MINUTES + CHECK_INTERVAL_MIN - 1) / CHECK_INTERVAL_MIN ))
 # Prints the reason and returns 0 if anything counts as activity.
 is_active() {
   # Claude Code hooks touch HEARTBEAT_DIR; +1 min absorbs timer jitter
-  # (captured, not piped to grep -q: that races with SIGPIPE under pipefail)
   if [[ -n "$(find "$HEARTBEAT_DIR" -type f -mmin "-$((CHECK_INTERVAL_MIN + 1))" -print -quit)" ]]; then
     echo "agent heartbeat"; return 0
   fi
 
-  # Open SSH session. sshd drops dead ones in ~3 min, but a session left open
-  # on an awake laptop keeps the box up; consider a local idle auto-kill.
+  # Open SSH session (sshd drops dead ones in ~3 min; live idle ones keep it up)
   if [[ -n "$(ss -Htn state established '( sport = :22 )')" ]]; then
     echo "ssh session"; return 0
   fi
@@ -348,8 +352,7 @@ if (( count < idle_checks )); then
   exit 0
 fi
 
-# Reset first: after resume every heartbeat looks stale, and the box must get
-# a full idle window before it can hibernate again.
+# Reset first: after resume, heartbeats look stale; wait a full idle window again.
 echo 0 > "$STATE_FILE"
 sync
 
@@ -368,7 +371,6 @@ EOF
 
 chmod 755 /usr/local/bin/devbox-idle-check
 
-# Runs the checker every 5 min
 cat > /etc/systemd/system/devbox-idle.service <<'EOF'
 [Unit]
 Description=Hibernate devbox when idle
@@ -452,7 +454,6 @@ runuser -l "$DEV_USER" -s /bin/bash -c \
   "{ [ -d ~/devbox ] || git clone $DOTFILES_REPO ~/devbox; } && ~/devbox/dotfiles/install.sh" \
   || warn "dotfiles install failed; re-run as $DEV_USER: ~/devbox/dotfiles/install.sh"
 
-# Bootstrap timestamp, for debugging
 install -d /var/lib/devbox
 date -u +%FT%TZ > /var/lib/devbox/bootstrapped
 log "Bootstrap complete"

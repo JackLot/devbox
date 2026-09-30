@@ -163,7 +163,7 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .scroll { overflow-x: auto; }
 .section { margin-top: 12px; }
 /* claude sessions */
-.sessions { margin-top: 12px; }
+.sessions { margin-top: 24px; margin-bottom: 12px; }
 .sess { padding: 14px 0; border-top: 1px solid var(--grid); display: grid; gap: 6px; min-width: 0; }
 .sess:first-of-type { border-top: 0; padding-top: 6px; }
 .sess:last-of-type { padding-bottom: 2px; }
@@ -206,6 +206,9 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
   .agents .d { grid-row: 2; grid-column: 2 / 4; }
   .card-head { align-items: flex-start; }
   .counts { display: block; margin: 2px 0 0; }
+  /* No room for the idle count on phones; drop the dot before it if it was last. */
+  .counts .idle { display: none; }
+  .counts span:has(+ .idle:last-child)::after { content: none; }
 }
 .stop {
   font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink-2); background: none;
@@ -222,10 +225,12 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .dot.waiting { background: var(--warning); }
 .dot.idle { background: var(--muted); }
 .dot.stopped { background: var(--critical); }
+.dot.good { background: var(--good); }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
 @media (max-width: 560px) { .sess .top { flex-wrap: wrap; } .sess .sep { display: none; } .sess .where { flex-basis: 100%; order: 3; } }
 .counts span { white-space: nowrap; }
+.counts span:not(:last-child)::after { content: " ·"; }
 .counts { color: var(--ink-2); font-weight: 400; margin-left: 8px; }
 .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
 .actions button { white-space: nowrap; }
@@ -233,6 +238,65 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .hib-btn:hover { filter: brightness(1.1); }
 .hib-btn:disabled { opacity: .6; cursor: default; }
 .banner { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+/* agent runner */
+.runner-next { margin-left: auto; color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.runner-now { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; padding-bottom: 24px; padding-top: 12px; border-bottom: none; }
+.runner-now .sep { color: var(--muted); }
+.runner-now a { color: inherit; white-space: nowrap; }
+.runner-now .ttl { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runner-now .d { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.runner h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 14px 0 4px; }
+.runner .tbl a { color: inherit; }
+.runner .tbl .chip { font-size: 12px; }
+.runner .dim { color: var(--muted); }
+.runner .log { height: 200px; }
+.runner h3 .note-inline { margin-left: 6px; }
+.dot.queued { background: none; border: 2px solid var(--s1); }
+.issues { table-layout: auto; }
+.issues td { vertical-align: middle; padding-top: 9px; padding-bottom: 9px; }
+.issues th { font-size: 13px; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+.issues th, .issues td { width: 1%; }
+.issues th + th, .issues td + td { padding-left: 16px; }
+/* max-width:0 lets the ellipsis work in an auto-layout table */
+.issues .main { width: 100%; max-width: 0; }
+.issues .ttl { font-weight: 500; }
+.issues .state { display: flex; align-items: center; gap: 8px; }
+.tags { display: flex; gap: 4px; }
+.copy {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); background: none; border: 0;
+  padding: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; text-align: left;
+  display: inline-flex; align-items: center;
+}
+.copy .br { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; color: var(--muted); }
+.copy .br svg { flex: none; }
+.divider { border: 0; border-top: 1px solid var(--axis); margin: 50px 0 50px; }
+.copy:hover, .copy:focus-visible { color: var(--ink); text-decoration: underline; outline: none; }
+.copy.done { color: var(--good-ink); text-decoration: none; }
+.copy-btn { font-size: 11px; padding: 0 6px; margin-left: 8px; line-height: 18px; vertical-align: 1px; }
+details.fold > summary { list-style: none; cursor: pointer; display: inline-block; }
+details.fold > summary h3 { display: flex; align-items: center; gap: 6px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary svg { transition: transform .15s; }
+details.fold[open] > summary svg { transform: rotate(90deg); }
+details.fold > summary:hover h3 { color: var(--ink-2); }
+.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
+.tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.runner .go { font-size: 12px; padding: 2px 10px; white-space: nowrap; }
+/* Copy icon fades in on hover so it's clear a click copies; opacity keeps the width fixed */
+.copy .cp { display: inline-flex; margin-left: 6px; color: var(--muted); opacity: 0; transition: opacity .1s; }
+.copy:hover .cp, .copy:focus-visible .cp { opacity: 1; }
+.runs tbody tr { cursor: pointer; }
+.runs tbody tr:hover, .runs tbody tr:focus-visible, .issues .lastrun:hover { background: var(--page); outline: none; }
+.issues .lastrun { cursor: pointer; border-radius: 4px; }
+/* run modal */
+.run-body { display: grid; gap: 14px; overflow-wrap: anywhere; }
+.run-body h3 { margin: 0 0 4px; }
+.run-body .facts { margin-top: 0; padding-top: 0; border-top: 0; }
+.run-body .md { white-space: pre-wrap; font-size: 13px; line-height: 1.55; padding: 10px 12px; border-radius: 8px; background: var(--page); border: 1px solid var(--border); }
+.run-body ul { margin: 0; padding-left: 20px; font-size: 13px; }
+.run-body li + li { margin-top: 4px; }
+.run-body .log { height: auto; max-height: 320px; }
+.run-body summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
 .theme { background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -278,6 +342,35 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
     <div id="claude"></div>
   </section>
 
+  <section class="card runner" id="runnerCard" hidden>
+    <div class="card-head">
+      <h2>Agent runner</h2>
+      <span class="runner-next" id="runnerNext"></span>
+      <span id="runnerStart" hidden></span>
+    </div>
+    <div class="runner-now" id="runnerNow"></div>
+    <div class="scroll section" id="runnerIssues"></div>
+    <div class="note" id="runnerIssuesNote" hidden></div>
+    <details class="fold" id="runnerRunsFold">
+      <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Recent runs<span id="runnerRunsNote"></span></h3></summary>
+      <div class="scroll" id="runnerRuns"></div>
+    </details>
+    <details class="fold" id="runnerLogFold">
+      <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>cron.log</h3></summary>
+      <pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div>
+    </details>
+  </section>
+
+  <dialog class="modal" id="runModal" aria-labelledby="runModalTitle">
+    <div class="modal-head">
+      <h2 id="runModalTitle">Run</h2>
+      <button class="theme" id="runClose" type="button">Close</button>
+    </div>
+    <div class="run-body" id="runBody"></div>
+  </dialog>
+
+  <hr class="divider">
+
   <section class="grid tiles">
     <div class="card tile hib-tile" id="hibCard" role="button" tabindex="0" aria-haspopup="dialog" title="Show auto-hibernate details and log" hidden>
       <div class="label">Auto-hibernate<span class="more">Details ›</span></div>
@@ -292,7 +385,9 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
     <div class="card tile"><div class="label">Memory</div><div class="value" id="memV">–</div><div class="sub" id="memS"></div><div class="spark" id="memC"></div></div>
   </section>
 
-  <section class="grid two">
+  <section class="card section"><h2>Listening ports</h2><div class="scroll" id="ports"></div></section>
+
+  <section class="grid two section">
     <div class="card"><h2>Disks</h2><div id="disks"></div></div>
     <div class="card"><h2>Swap</h2><div id="swap"></div></div>
   </section>
@@ -302,7 +397,6 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
     <div class="card"><h2>Top processes by memory</h2><div class="scroll" id="topMem"></div></div>
   </section>
 
-  <section class="card section"><h2>Listening ports</h2><div class="scroll" id="ports"></div></section>
 </main>
 
 <script>
@@ -594,8 +688,7 @@ function renderClaude(d) {
   const now = Date.now() / 1000;
   const n = st => list.filter(s => s.status === st || (st === "idle" && s.status === "shell")).length;
   $("claudeCounts").innerHTML = [["busy", "working"], ["waiting", "need input"], ["idle", "idle"], ["stopped", "stopped"]]
-    .map(([st, word]) => n(st) && `${n(st)} ${word}`).filter(Boolean)
-    .map((t, i, all) => `<span>${t}${i < all.length - 1 ? " ·" : ""}</span>`).join(" ");
+    .map(([st, word]) => n(st) ? `<span class="${st}">${n(st)} ${word}</span>` : "").filter(Boolean).join(" ");
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === claudeView)));
   if (claudeView === "compact") { $("claude").innerHTML = renderCompact(list, now); return; }
   $("claude").innerHTML = list.map(s => {
@@ -610,6 +703,247 @@ function renderClaude(d) {
       ${s.reply ? `<div class="reply" title="${esc(s.reply)}">${esc(s.reply)}</div>` : ""}
     </div>`;
   }).join("");
+}
+
+// Agent runner: the run's outcome as the agent reported it ("done" means a PR
+// was opened or updated, unless it made no commits; see the issue comment).
+const RUN_STATUS = {
+  running: ["busy", "Running"], done: ["good", "Done"], needs_human: ["waiting", "Needs you"],
+  failed: ["stopped", "Failed"], interrupted: ["stopped", "Interrupted"],
+};
+function runChip(status) {
+  const [dot, label] = RUN_STATUS[status] || ["idle", status || "–"];
+  return `<span class="chip"><span class="dot ${dot}" aria-hidden="true"></span>${esc(label)}</span>`;
+}
+const issueLink = x => {
+  const label = `${x.repo}#${x.issue}`;
+  return x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
+};
+
+const BRANCH_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" aria-label="branch" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="3" cy="2.5" r="1.5"/><circle cx="3" cy="9.5" r="1.5"/><circle cx="9" cy="3.5" r="1.5"/><path d="M3 4v4M9 5c0 2.5-6 1.5-6 3"/></svg>';
+const COPY_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><path d="M8.5 2.2V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v5.5a1 1 0 0 0 1 1h.2"/></svg>';
+const logName = p => p ? p.split("/").pop() : "";
+
+// Where an issue is in the runner's label lifecycle (see agent-runner/README.md)
+const ISSUE_STATE = {
+  wip: ["busy", "Working"], queued: ["queued", "Queued"], needs_human: ["waiting", "Needs you"],
+  failed: ["stopped", "Failed"], pr: ["good", "PR to review"], closed: ["idle", "Closed"],
+};
+function issueChip(state) {
+  const [dot, label] = ISSUE_STATE[state] || ["idle", "No agent label"];
+  return `<span class="chip"><span class="dot ${dot}" aria-hidden="true"></span>${esc(label)}</span>`;
+}
+const tag = l => {
+  const color = /^[0-9a-f]{6}$/i.test(l.color || "") ? "#" + l.color : "var(--muted)";
+  return `<span class="tag"><i style="background:${color}"></i>${esc(l.name)}</span>`;
+};
+
+// The PR the runner opened for an issue, as a link: "PR#17", plus "draft" if it is one.
+const prLink = (pr, text) => `<a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(text || "PR#" + pr.number)}</a>` +
+  (pr.isDraft ? ' <span class="dim">draft</span>' : "");
+const issuePr = x => {
+  const r = last && last.runner;
+  const i = r && r.issues.find(i => i.repo === x.repo && i.issue === x.issue);
+  return i && i.pr;
+};
+
+function issueState(x) {
+  // "PR#17 to review" in place of the chip's label when the PR is the state
+  if (x.state === "pr" && x.pr) {
+    return `<span class="chip"><span class="dot good" aria-hidden="true"></span><span>${prLink(x.pr)} to review</span></span>`;
+  }
+  return issueChip(x.state) + (x.pr ? " " + prLink(x.pr) : "");
+}
+
+// A run picks up every queued issue, so "Run now" sits in the card head beside the
+// cron countdown rather than on a row, and only while something is queued.
+function renderStart(r) {
+  const queued = r.issues.filter(x => x.state === "queued").map(x => x.repo + "#" + x.issue);
+  $("runnerStart").hidden = !queued.length;
+  if (!queued.length) { $("runnerStart").innerHTML = ""; return; }
+  const why = r.running ? "A run is in progress; queued issues wait for the next tick"
+    : r.can_start !== true ? "Can't start runs from here: " + r.can_start : "";
+  $("runnerStart").innerHTML = `<button type="button" class="hib-btn go" data-queued="${esc(queued.join(", "))}"${why ? ` disabled title="${esc(why)}"`
+    : ` title="${esc("Start agent-runner now instead of waiting for the next cron tick\nQueued: " + queued.join(", "))}"`}>Run now · ${queued.length} queued</button>`;
+}
+
+function renderIssues(r, now) {
+  const gh = r.github, rows = r.issues;
+  $("runnerIssuesNote").hidden = !(gh && gh.error);
+  $("runnerIssuesNote").textContent = gh && gh.error ? "Couldn't refresh from GitHub: " + gh.error : "";
+  const open = rows.filter(x => x.state !== "closed").length;
+  // Other columns shrink to their contents (width:1% + nowrap); the issue column takes the rest.
+  $("runnerIssues").innerHTML = rows.length ? `<table class="tbl issues">
+    <thead><tr><th class="main">Issues (${open} open)</th><th>Tags</th><th>${esc(home(r.home))}/worktrees/</th><th>State</th><th>Last run</th></tr></thead><tbody>` +
+    rows.map(x => {
+      const wt = x.worktree, run = x.last_run;
+      const wtTitle = wt && `Click to copy: cd ${wt.path}\nBranch ${wt.branch}${wt.activity ? " · last git activity " + dur(now - wt.activity) + " ago" : ""}`;
+      return `<tr>
+      <td class="main" title="${esc(x.title || "")}">${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl">${esc(x.title || "")}</span></td>
+      <td>${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'}</td>
+      <td>${wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc(wtTitle)}">${esc(wt.path.split("/").pop())}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button>` : '<span class="dim">–</span>'}</td>
+      <td><div class="state">${issueState(x)}</div></td>
+      <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td></tr>`;
+    }).join("") + "</tbody></table>"
+    : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading issues from GitHub…"}</div>`;
+}
+
+// navigator.clipboard only exists on https/localhost; the dashboard is plain
+// http over Tailscale, so fall back to a hidden textarea + execCommand.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove();
+  return ok;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  const ok = await copyText(b.dataset.copy);
+  const was = b.innerHTML;
+  // The issues table re-renders every poll; the flash only has to last until then.
+  b.classList.add("done"); b.textContent = ok ? "Copied" : "Couldn't copy";
+  setTimeout(() => { if (b.isConnected) { b.classList.remove("done"); b.innerHTML = was; } }, 1200);
+});
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("#runnerStart button.go");
+  if (!b) return;
+  if (!confirm(`Start agent-runner now?\n\nIt picks up every queued issue (${b.dataset.queued}), the same as the next cron tick would. Output goes to cron.log.`)) return;
+  b.disabled = true; b.textContent = "Starting…";
+  try {
+    const r = await fetch("api/runner/start", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Dashboard": "1" }, body: "{}",
+    });
+    const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
+    if (!r.ok) alert("Couldn't start it: " + res.message);
+  } catch (err) {
+    alert("Couldn't reach the dashboard server.");
+  }
+  setTimeout(poll, 1500);
+});
+
+// Run details: click a recent run (or an issue's last run).
+const runModal = $("runModal");
+let runReq = 0;
+async function openRun(name) {
+  const r = last && last.runner;
+  const x = r && r.runs.find(x => logName(x.log) === name);
+  if (!x) return;
+  const req = ++runReq;
+  $("runModalTitle").textContent = `Run · ${x.repo}#${x.issue}`;
+  const head = `<div class="runner-now">${runChip(x.status)}<span class="sep">•</span>${issueLink(x)}
+    <span class="ttl" title="${esc(x.title || "")}">${esc(x.title || "")}</span></div>`;
+  $("runBody").innerHTML = head + '<div class="note">Loading…</div>';
+  if (!runModal.open) runModal.showModal();
+  let d;
+  try {
+    const res = await fetch("api/runner/run?log=" + encodeURIComponent(name), { cache: "no-store", headers: { "X-Dashboard": "1" } });
+    d = await res.json();
+    if (!res.ok) throw new Error(d.message || "HTTP " + res.status);
+  } catch (err) {
+    if (req === runReq) $("runBody").innerHTML = head + `<div class="note">Couldn't load the run: ${esc(err.message)}</div>`;
+    return;
+  }
+  if (req !== runReq) return;
+  const wt = `${r.home}/worktrees/${x.repo}-${x.issue}`;
+  const s = x.session, pr = issuePr(x);
+  const resume = d.session_id && `cd ${home(wt)} && claude --resume ${d.session_id}`;
+  // [label, text] is escaped; [label, null, html] is trusted markup
+  const facts = [
+    ["Started", clock(x.started)],
+    ["Took", x.ended ? dur(x.ended - x.started) + " · ended " + clock(x.ended) : x.status === "running" ? "running for " + durSec(Date.now() / 1000 - x.started) : "–"],
+    x.cost != null && ["Cost", "$" + x.cost.toFixed(2) + (x.turns ? " · " + x.turns + " turns" : "")],
+    d.models.length && ["Model", d.models.join(", ")],
+    s && ["Now", `${STATUS[s.status] || s.status}${sessionDetail(s) ? " · " + sessionDetail(s) : ""}`],
+    pr && ["PR", null, prLink(pr, `PR#${pr.number}`) + (pr.title ? " " + esc(pr.title) : "")],
+    resume && ["Resume", null, `<span class="cmd">${esc(resume)}</span><button type="button" class="theme copy-btn" data-copy="${esc(resume)}" title="Copy the resume command">Copy</button>`],
+    ["Log", `${home(d.log)} · ${bytes(d.size)}`],
+  ].filter(Boolean);
+  const section = (title, html) => `<div><h3>${esc(title)}</h3>${html}</div>`;
+  let raw = d.raw;
+  try { raw = JSON.stringify(JSON.parse(raw), null, 2); } catch (e) {}
+  $("runBody").innerHTML = head +
+    `<dl class="facts">${facts.map(([k, v, html]) => `<dt>${esc(k)}</dt><dd>${html != null ? html : esc(v)}</dd>`).join("")}</dl>` +
+    (!d.size ? '<div class="note">The log is written when the run ends.</div>' : "") +
+    (d.question ? section("Question", `<div class="md">${esc(d.question)}</div>`) : "") +
+    (d.summary ? section(d.status === "needs_human" ? "Summary" : "Summary (PR description)", `<div class="md">${esc(d.summary)}</div>`) : "") +
+    (d.decisions.length ? section("Decisions", `<ul>${d.decisions.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`) : "") +
+    (d.result ? section("Result", `<div class="md">${esc(d.result)}</div>`) : "") +
+    (d.denials.length ? section(`Permission denials (${d.denials.length})`, `<ul>${d.denials.map(p => `<li><b>${esc(p.tool)}</b> ${esc(p.detail)}</li>`).join("")}</ul>`) : "") +
+    (d.cron.length ? section("cron.log", `<pre class="log">${d.cron.map(esc).join("\n")}</pre>`) : "") +
+    (d.size ? `<details><summary>Raw log${d.truncated ? " (first " + bytes(d.raw.length) + ")" : ""}</summary><pre class="log">${esc(raw)}</pre></details>` : "");
+}
+document.addEventListener("click", e => {
+  const row = e.target.closest("#runnerCard [data-log]");
+  if (!row || e.target.closest("a, button")) return;
+  openRun(row.dataset.log);
+});
+document.addEventListener("keydown", e => {
+  const row = e.target.closest && e.target.closest("#runnerCard [data-log]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRun(row.dataset.log); }
+});
+$("runnerLogFold").ontoggle = () => { if ($("runnerLogFold").open) $("runnerLog").scrollTop = $("runnerLog").scrollHeight; };
+$("runClose").onclick = () => runModal.close();
+runModal.onclick = e => {
+  const r = runModal.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) runModal.close();
+};
+
+function renderRunner(d) {
+  const r = d.runner;
+  $("runnerCard").hidden = !r;
+  if (!r) return;
+  const now = Date.now() / 1000, cur = r.current;
+  const n = st => r.runs.filter(x => x.status === st).length;
+  $("runnerRunsNote").textContent = [["done", "done"], ["needs_human", "need you"], ["failed", "failed"], ["interrupted", "interrupted"]]
+    .map(([st, word]) => n(st) && ` · ${n(st)} ${word}`).filter(Boolean).join("");
+
+  if (cur) {
+    const s = cur.session;
+    const detail = s ? `${STATUS[s.status] || s.status}${sessionDetail(s) ? " · " + sessionDetail(s) : ""}` : "";
+    $("runnerNow").innerHTML = `${runChip("running")}<span class="sep">•</span>${issueLink(cur)}
+      <span class="ttl" title="${esc(cur.title || "")}">${esc(cur.title || "")}</span>
+      <span class="d" title="${esc(detail)}">${detail ? "· " + esc(detail) : ""}</span>
+      <span class="dim" id="runnerElapsed"></span>`;
+  } else if (r.running) {
+    $("runnerNow").innerHTML = `${runChip("running")}<span class="d">checking for issues labeled <b>agent</b></span>`;
+  } else {
+    $("runnerNow").innerHTML = `<span class="chip"><span class="dot idle" aria-hidden="true"></span>Idle</span>
+      <span class="d">${r.last_log_line ? "last logged " + dur(now - r.last_log_line) + " ago" : ""}</span>`;
+  }
+
+  renderIssues(r, now);
+  renderStart(r);
+
+  $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl runs"><colgroup><col style="width:120px"><col style="width:30%"><col style="width:112px"><col style="width:64px"><col style="width:64px"><col></colgroup>
+    <thead><tr><th>Started</th><th>Issue</th><th>Outcome</th><th class="num">Took</th><th class="num">Cost</th><th>Summary</th></tr></thead><tbody>` +
+    r.runs.map(x => `<tr tabindex="0" data-log="${esc(logName(x.log))}" title="Show run details">
+      <td>${clock(x.started)}</td>
+      <td title="${esc(x.title || "")}">${issueLink(x)} ${esc(x.title || "")}</td>
+      <td>${runChip(x.status)}</td>
+      <td class="num">${x.ended ? dur(x.ended - x.started) : x.status === "running" ? '<span class="liveRun"></span>' : "–"}</td>
+      <td class="num">${x.cost != null ? "$" + x.cost.toFixed(2) : "–"}</td>
+      <td>${esc(x.summary || "")}</td></tr>`).join("") +
+    "</tbody></table>" : '<div class="note">No runs yet</div>';
+
+  const el = $("runnerLog");
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  el.innerHTML = r.log.lines.map(l => {
+    const m = /^\[(\d{4}-\d\d-\d\d) (\d\d:\d\d):\d\d\] (.*)$/.exec(l);
+    if (!m) return `<span class="t">${esc(l)}</span>`;
+    const cls = /^(Picking up|PR:|Failed|Needs human|No commits|Error|Replied)/.test(m[3]) ? ' class="hi"' : "";
+    return `<span class="t">${m[1].slice(5)} ${m[2]}</span>  <span${cls}>${esc(m[3])}</span>`;
+  }).join("\n");
+  $("runnerLogNote").textContent = r.log.available ? r.log.path + " · newest last" : r.log.path + " not found yet";
+  if (atBottom) el.scrollTop = el.scrollHeight;
+  tickLive();
 }
 
 let last = null, lastFetch = 0;
@@ -679,6 +1013,14 @@ hibModal.onclick = e => {
 
 function tickLive() {
   const idle = last && last.idle, now = Date.now() / 1000;
+  const r = last && last.runner;
+  if (r) {
+    $("runnerNext").textContent = r.next_run ? `next run in ${durSec(r.next_run - now)} · ${r.schedule}`
+      : r.schedule ? r.schedule : "no cron entry";
+    const run = r.current ? durSec(now - r.current.started) : "";
+    document.querySelectorAll(".liveRun").forEach(el => el.textContent = run);
+    if ($("runnerElapsed")) $("runnerElapsed").textContent = run;
+  }
   if (!idle) return;
   const next = idle.next_check ? "idle check in " + durSec(idle.next_check - now) : "idle check pending";
   document.querySelectorAll(".liveNext").forEach(el => el.textContent = next);
@@ -705,6 +1047,7 @@ function render(d) {
   // Only on an EC2 devbox (idle checker + instance metadata present)
   $("hibBtn").hidden = !(d.idle && h.instance && h.instance.instance_id);
   renderClaude(d);
+  renderRunner(d);
 
   const hist = d.history.rows, T = hist.map(r => r[0]);
   const col = i => hist.map(r => r[i]);
