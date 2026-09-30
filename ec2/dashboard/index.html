@@ -106,7 +106,7 @@ header .meta b { font-weight: 500; color: var(--ink); }
 @media (hover: none) { .hib-tile .more { opacity: 1; } }
 .hib-tile .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hib-tile .status { font-size: 12px; font-weight: 500; color: var(--ink); }
-.hib-tile .steps { max-width: none; }
+.hib-tile .steps { max-width: none; margin: 8px 0 6px; }
 dialog.modal {
   width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
@@ -123,8 +123,6 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .tile .sub { color: var(--ink-2); font-size: 12px; min-height: 18px; }
 .spark { position: relative; margin-top: 8px; }
 .spark svg { display: block; width: 100%; height: 56px; overflow: visible; }
-.legend { display: flex; gap: 12px; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
-.key { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; border-radius: 1px; }
 .tip {
   position: absolute; top: -6px; transform: translate(-50%, -100%); pointer-events: none;
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
@@ -267,16 +265,14 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
   <section class="grid tiles">
     <div class="card tile hib-tile" id="hibCard" role="button" tabindex="0" aria-haspopup="dialog" title="Show auto-hibernate details and log" hidden>
       <div class="label">Auto-hibernate<span class="more">Details ›</span></div>
-      <div class="value" id="hibTileV">–</div>
       <div class="sub" id="hibTileS"></div>
-      <div class="sub" id="hibTileSub"></div>
+      <div class="value" id="hibTileV">–</div>
       <div class="steps" id="hibTileSteps" aria-hidden="true"></div>
+      <div class="sub" id="hibTileSub"></div>
     </div>
     <div class="card tile"><div class="label">CPU</div><div class="value" id="cpuV">–</div><div class="sub" id="cpuS"></div><div class="spark" id="cpuC"></div></div>
     <div class="card tile"><div class="label">Load (1 min)</div><div class="value" id="loadV">–</div><div class="sub" id="loadS"></div><div class="spark" id="loadC"></div></div>
     <div class="card tile"><div class="label">Memory</div><div class="value" id="memV">–</div><div class="sub" id="memS"></div><div class="spark" id="memC"></div></div>
-    <div class="card tile"><div class="label">Network</div><div class="value" id="netV">–</div><div class="sub" id="netS"></div><div class="spark" id="netC"></div>
-      <div class="legend"><span><i class="key" style="background:var(--s1)"></i>Received</span><span><i class="key" style="background:var(--s2)"></i>Sent</span></div></div>
   </section>
 
   <section class="grid two">
@@ -302,7 +298,6 @@ function bytes(n, d = 1) {
   while (Math.abs(n) >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return n.toFixed(i === 0 ? 0 : d) + " " + u[i];
 }
-const rate = n => n == null ? "–" : bytes(n) + "/s";
 // Durations are minute-granular so the page stays still between polls; only
 // the two live counters (next idle check, Claude heartbeat) use durSec.
 function dur(s) {
@@ -698,10 +693,6 @@ function render(d) {
   $("memV").textContent = (m.used / m.total * 100).toFixed(0) + "%";
   $("memS").textContent = bytes(m.used) + " used · " + bytes(m.available) + " available of " + bytes(m.total);
   spark($("memC"), T, [{ values: col(3), color: "var(--s1)" }], { max: 100, fmt: v => v == null ? "–" : v.toFixed(0) + "%", label: "Memory used percent, last hour" });
-
-  $("netV").textContent = rate((d.network.rx || 0) + (d.network.tx || 0));
-  $("netS").textContent = "in " + rate(d.network.rx) + " · out " + rate(d.network.tx);
-  spark($("netC"), T, [{ values: col(5), color: "var(--s1)" }, { values: col(6), color: "var(--s2)" }], { fmt: rate, label: "Network received and sent, last hour" });
 
   $("disks").innerHTML = (d.disks || []).map(x => meterRow(x.mount, x.used, x.total, `<span>${esc(x.device)} · ${esc(x.fstype)}</span>`)).join("") || '<div class="note">No disks found</div>';
   $("swap").innerHTML = (d.swap || []).map(s => {
