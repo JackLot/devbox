@@ -17,6 +17,12 @@ Read this before starting; add to it when you learn something a future run would
   snapshot saved from `server.Sampler().get()` (sample twice, a second apart).
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
   `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
+- `git -C <path> ...`, `cd <dir> && git ...` and `bash -n` are refused; run plain `git ...` from
+  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess.
+- To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
+  port 0 in a thread inside `python3 -c` and call it with `urllib`. Stub `subprocess.Popen`
+  (after the first `sample()`) before exercising `/api/runner/start`, and remember it appends
+  to the real `~/.agent-runner/cron.log`; you are yourself a runner run holding the lock.
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the

@@ -556,6 +556,7 @@ RUNNER_HOME = os.environ.get("AGENT_RUNNER_HOME") or os.path.join(pwd.getpwuid(o
 RUNNER_RUNS = 10
 RUNNER_LOG_LINES = 80
 RUNNER_CONF_TTL = 60
+RUN_RAW_MAX = 512 * 1024
 _runner_runs = {}  # log path -> (mtime, size, run)
 _runner_titles = {}  # session id -> title; it never changes
 _runner_conf = {"time": 0}
@@ -617,16 +618,20 @@ def cron_next(expr, now):
 
 
 def runner_conf():
-    """Cron schedule and repo slugs; they rarely change, so read once a minute."""
+    """Cron entry and repo slugs; they rarely change, so read once a minute."""
     if time.time() - _runner_conf["time"] < RUNNER_CONF_TTL:
         return _runner_conf
-    schedule = None
+    schedule = command = path = None
     crontab = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=2).stdout
     for line in crontab.splitlines():
         line = line.strip()
-        if "agent-runner" in line and not line.startswith("#") and not line.startswith("PATH="):
+        if line.startswith("PATH="):
+            path = line[5:]  # the one in effect for the entry below it
+        elif "agent-runner" in line and not line.startswith("#"):
             f = line.split()
-            schedule = f[0] if f[0].startswith("@") else " ".join(f[:5])
+            n = 1 if f[0].startswith("@") else 5
+            schedule = " ".join(f[:n])
+            command = next((w for w in f[n:] if "agent-runner" in w), None)
             break
     # <checkout name> -> owner/repo, from each watched checkout's origin remote
     repos = {}
@@ -640,8 +645,43 @@ def runner_conf():
         m = url and re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
         if m:
             repos[os.path.basename(d.rstrip("/"))] = m.group(1)
-    _runner_conf.update(time=time.time(), schedule=schedule, repos=repos)
+    _runner_conf.update(time=time.time(), schedule=schedule, command=command, path=path, repos=repos)
     return _runner_conf
+
+
+# Issue labels, as set by agent-runner; the first one present gives the state.
+AGENT_LABELS = (("agent-wip", "wip"), ("agent", "queued"), ("agent-needs-human", "needs_human"),
+                ("agent-failed", "failed"), ("agent-pr", "pr"))
+GH_REFRESH = 60
+
+
+def gh_json(args, path):
+    env = dict(os.environ, PATH=path or os.environ.get("PATH", ""))
+    try:
+        r = subprocess.run(["gh"] + args, capture_output=True, text=True, timeout=20, env=env)
+    except FileNotFoundError:
+        raise RuntimeError("gh not found on PATH")
+    if r.returncode:
+        raise RuntimeError(((r.stderr or r.stdout).strip().splitlines() or ["gh exited %d" % r.returncode])[-1][:200])
+    return json.loads(r.stdout)
+
+
+def github_state(conf):
+    """Open issues and agent PRs of each watched repo. Slow (network), so the
+    sampler refreshes it once a minute in its own thread."""
+    out = {"time": time.time(), "error": None, "repos": {}}
+    for name, slug in conf["repos"].items():
+        try:
+            issues = gh_json(["issue", "list", "-R", slug, "--state", "open", "--limit", "200",
+                              "--json", "number,title,url,labels,updatedAt"], conf["path"])
+            prs = gh_json(["pr", "list", "-R", slug, "--state", "open", "--limit", "100",
+                           "--json", "number,url,isDraft,headRefName"], conf["path"])
+        except Exception as e:
+            out["error"] = "%s: %s" % (slug, e)
+            continue
+        out["repos"][name] = {"issues": issues,
+                              "prs": {p["headRefName"]: p for p in prs if p["headRefName"].startswith("agent/issue-")}}
+    return out
 
 
 def session_title(session_id):
@@ -713,7 +753,47 @@ def runner_worktree(path):
             "activity": activity or None}
 
 
-def agent_runner(sessions):
+def open_issues(conf, github, worktrees, last_run):
+    """Open issues the runner has touched (any agent-* label), with their PR,
+    worktree and last run, plus worktrees whose issue no longer qualifies (they
+    pile up if cleanup fails)."""
+    github = github or {"repos": {}}
+    wt_by = {(w["repo"], w["issue"]): w for w in worktrees}
+    rows, seen = [], set()
+    for name, data in github["repos"].items():
+        for i in data["issues"]:
+            labels = [{"name": lb.get("name"), "color": lb.get("color")} for lb in i.get("labels") or []]
+            names = {lb["name"] for lb in labels}
+            state = next((st for lb, st in AGENT_LABELS if lb in names), None)
+            key = (name, i["number"])
+            if not state and key not in wt_by:
+                continue
+            seen.add(key)
+            rows.append({"repo": name, "issue": i["number"], "title": i.get("title"), "url": i.get("url"),
+                         "labels": labels, "state": state, "updated": i.get("updatedAt"),
+                         "pr": data["prs"].get("agent/issue-%d" % i["number"])})
+    for w in worktrees:
+        key = (w["repo"], w["issue"])
+        if key in seen:
+            continue
+        # Not among the open issues GitHub returned: closed (removed on the next
+        # tick), or GitHub couldn't be reached for this repo.
+        rows.append({"repo": w["repo"], "issue": w["issue"], "title": w["title"], "url": w["url"],
+                     "labels": None, "state": "closed" if w["repo"] in github["repos"] else None,
+                     "updated": None, "pr": None})
+    order = {st: n for n, (_, st) in enumerate(AGENT_LABELS)}
+    rows.sort(key=lambda r: r["updated"] or "", reverse=True)
+    rows.sort(key=lambda r: order.get(r["state"], len(order)))
+    for r in rows:
+        w = wt_by.get((r["repo"], r["issue"]))
+        r["worktree"] = {k: w[k] for k in ("name", "path", "branch", "activity")} if w else None
+        run = last_run.get((r["repo"], r["issue"]))
+        r["last_run"] = {k: run[k] for k in ("status", "started", "log")} if run else None
+        r["title"] = r["title"] or (run and run["title"])
+    return rows
+
+
+def agent_runner(sessions, github):
     if not os.path.isdir(RUNNER_HOME):
         return None
     now = time.time()
@@ -758,9 +838,8 @@ def agent_runner(sessions):
             repo = conf["repos"].get(w["repo"])
             w["url"] = "https://github.com/%s/issues/%d" % (repo, w["issue"]) if repo and w["issue"] else None
             r = last_run.get((w["repo"], w["issue"]))
-            w["title"], w["last_status"] = (r["title"], r["status"]) if r else (None, None)
+            w["title"] = r["title"] if r else None
             worktrees.append(w)
-    worktrees.sort(key=lambda w: -(w["activity"] or 0))
 
     cron_log = os.path.join(RUNNER_HOME, "cron.log")
     lines = safe(tail, cron_log, RUNNER_LOG_LINES)
@@ -780,8 +859,87 @@ def agent_runner(sessions):
         "next_run": safe(cron_next, conf["schedule"], now) if conf["schedule"] else None,
         "last_log_line": last_tick,
         "runs": runs,
-        "worktrees": worktrees,
+        "issues": open_issues(conf, github, worktrees, last_run),
+        "worktrees": len(worktrees),
+        "github": github and {"time": github["time"], "error": github["error"]},
+        "can_start": can_start_runner(conf),
         "log": {"path": cron_log, "available": lines is not None, "lines": lines or []},
+    }
+
+
+def can_start_runner(conf):
+    """True, or why the dashboard can't start a run itself."""
+    if not conf["command"]:
+        return "no agent-runner entry in the crontab"
+    if not os.access(RUNNER_HOME, os.W_OK):
+        # The installed service mounts home read-only unless installed with --run-agents
+        return "the dashboard can't write to %s; reinstall it with dashboard/install.sh --run-agents" % RUNNER_HOME
+    return True
+
+
+def start_runner():
+    """Start agent-runner now, as cron would (same command, PATH and log)."""
+    conf = runner_conf()
+    ok = can_start_runner(conf)
+    if ok is not True:
+        return 503, ok
+    lock = os.path.join(RUNNER_HOME, "lock")
+    if os.path.exists(lock) and safe(lock_holder, lock):
+        return 409, "a run is already in progress; issues queued after it started are picked up on the next tick"
+    log = open(os.path.join(RUNNER_HOME, "cron.log"), "ab")
+    log.write(("[%s] Started from the dashboard\n" % time.strftime("%Y-%m-%d %H:%M:%S")).encode())
+    log.flush()
+    env = dict(os.environ, PATH=conf["path"] or os.environ.get("PATH", ""))
+    try:
+        # Own session, so it outlives a dashboard restart
+        p = subprocess.Popen([conf["command"]], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                             cwd=os.path.expanduser("~"), env=env, start_new_session=True)
+    except OSError as e:
+        return 500, str(e)
+    finally:
+        log.close()
+    threading.Thread(target=p.wait, daemon=True).start()  # reap it
+    print("started agent-runner (pid %d) via dashboard" % p.pid, flush=True)
+    return 200, "started agent-runner (pid %d)" % p.pid
+
+
+def run_details(name):
+    """Everything in one run's log, plus its cron.log lines, for the run modal."""
+    if not re.fullmatch(r"[\w.-]+\.json", name or ""):
+        return None
+    path = os.path.join(RUNNER_HOME, "logs", name)
+    run = os.path.isfile(path) and runner_run(path)
+    if not run:
+        return None
+    with open(path, "rb") as f:
+        raw = f.read(RUN_RAW_MAX + 1).decode(errors="replace")
+    d = safe(json.loads, raw) if len(raw) <= RUN_RAW_MAX else None
+    d = d if isinstance(d, dict) else {}
+    out = d.get("structured_output") or {}
+    ended = run["ended"] or time.time()
+    lines, t = [], None
+    for line in safe(tail, os.path.join(RUNNER_HOME, "cron.log"), 5000) or []:
+        m = re.match(r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\]", line)
+        if m:
+            t = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+        if t and run["started"] - 60 <= t <= ended + 120:
+            lines.append(line)
+    return {
+        "log": path,
+        "size": os.path.getsize(path),
+        "raw": raw[:RUN_RAW_MAX],
+        "truncated": len(raw) > RUN_RAW_MAX,
+        "status": out.get("status"),
+        "summary": out.get("summary"),
+        "decisions": out.get("decisions") or [],
+        "question": out.get("question"),
+        "result": None if out else d.get("result"),
+        "is_error": d.get("is_error"),
+        "session_id": d.get("session_id"),
+        "models": sorted((d.get("modelUsage") or {}).keys()),
+        "denials": [{"tool": x.get("tool_name"), "detail": _tool_summary({"input": x.get("tool_input")})}
+                    for x in d.get("permission_denials") or [] if isinstance(x, dict)],
+        "cron": lines,
     }
 
 
@@ -815,14 +973,29 @@ class Sampler:
         self.history = collections.deque(maxlen=HISTORY)
         self.snapshot = {}
         self.instance = None
+        self.github = None
+        self.github_wake = threading.Event()
         self._prev = None
 
     def start(self):
         threading.Thread(target=self._imds, daemon=True).start()
         threading.Thread(target=self._loop, daemon=True).start()
+        threading.Thread(target=self._github, daemon=True).start()
 
     def _imds(self):
         self.instance = safe(imds)
+
+    def _github(self):
+        while True:
+            if os.path.isdir(RUNNER_HOME):
+                self.github = safe(github_state, runner_conf()) or self.github
+                self.resample_soon()
+            self.github_wake.wait(GH_REFRESH)
+            self.github_wake.clear()
+
+    def refresh_github_soon(self, delay=5):
+        """After starting a run: its label changes show up without waiting a minute."""
+        threading.Timer(delay, self.github_wake.set).start()
 
     def _loop(self):
         while True:
@@ -908,7 +1081,7 @@ class Sampler:
             "ports": safe(listening, procs),
             "idle": safe(idle_state),
             "claude": claude,
-            "runner": safe(agent_runner, claude),
+            "runner": safe(agent_runner, claude, self.github),
         }
         with self.lock:
             if cpu_pct is not None:
@@ -1040,12 +1213,20 @@ class Handler(BaseHTTPRequestHandler):
             n = int(parse_qs(url.query).get("n", ["100"])[0])
             lines = safe(tail, IDLE_LOG, max(1, min(n, 2000)))
             self.json({"path": IDLE_LOG, "available": lines is not None, "lines": lines or []})
+        elif url.path == "/api/runner/run":
+            # Run logs can hold secrets the agent read: same checks as a POST,
+            # except that browsers leave Origin off same-origin GETs.
+            refused = self.refuse_foreign(origin_required=False)
+            if refused:
+                return self.reply(403, refused)
+            d = safe(run_details, parse_qs(url.query).get("log", [""])[0])
+            self.json(d) if d else self.send(404, b"no such run log\n", "text/plain")
         else:
             self.send(404, b"not found\n", "text/plain")
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/stop", "/api/hibernate"):
+        if path not in ("/api/stop", "/api/hibernate", "/api/runner/start"):
             return self.send(404, b"not found\n", "text/plain")
         refused = self.refuse_foreign()
         if refused:
@@ -1057,6 +1238,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, "expected a JSON body")
         if path == "/api/hibernate":
             return self.reply(*hibernate(self.sampler.instance, dry_run=body.get("dry_run") is True))
+        if path == "/api/runner/start":
+            code, message = start_runner()
+            if code == 200:
+                self.sampler.resample_soon()
+                self.sampler.refresh_github_soon()
+            return self.reply(code, message)
         try:
             pid, start = int(body["pid"]), int(body["start"])
         except (KeyError, TypeError, ValueError):
@@ -1066,7 +1253,7 @@ class Handler(BaseHTTPRequestHandler):
             self.sampler.resample_soon()
         self.reply(code, message)
 
-    def refuse_foreign(self):
+    def refuse_foreign(self, origin_required=True):
         """Reason to refuse a request that didn't come from this dashboard's
         own page, or None. A custom header can't be sent cross-origin without
         a CORS preflight, which this server never approves; Origin and Host
@@ -1075,7 +1262,7 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if self.headers.get("X-Dashboard") != "1":
             return "missing X-Dashboard header"
-        if not origin or urlparse(origin).netloc != host:
+        if (origin or origin_required) and urlparse(origin or "").netloc != host:
             return "cross-origin request refused"
         if not allowed_host(host, (self.sampler.instance or {}).get("name")):
             return "unknown Host %r (add it to DASHBOARD_HOSTS)" % host

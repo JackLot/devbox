@@ -232,7 +232,26 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .runner .tbl .chip { font-size: 12px; }
 .runner .dim { color: var(--muted); }
 .runner .log { height: 200px; }
-.runner .two { gap: 20px; }
+.runner h3 .note-inline { margin-left: 6px; }
+.dot.queued { background: none; border: 2px solid var(--s1); }
+.issues td { vertical-align: top; }
+.issues .ttl { font-weight: 500; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; white-space: normal; }
+.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
+.tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.runner .go { font-size: 11px; padding: 1px 8px; }
+.runs tbody tr { cursor: pointer; }
+.runs tbody tr:hover, .runs tbody tr:focus-visible, .issues .lastrun:hover { background: var(--page); outline: none; }
+.issues .lastrun { cursor: pointer; border-radius: 4px; }
+/* run modal */
+.run-body { display: grid; gap: 14px; overflow-wrap: anywhere; }
+.run-body h3 { margin: 0 0 4px; }
+.run-body .facts { margin-top: 0; padding-top: 0; border-top: 0; }
+.run-body .md { white-space: pre-wrap; font-size: 13px; line-height: 1.55; padding: 10px 12px; border-radius: 8px; background: var(--page); border: 1px solid var(--border); }
+.run-body ul { margin: 0; padding-left: 20px; font-size: 13px; }
+.run-body li + li { margin-top: 4px; }
+.run-body .log { height: auto; max-height: 320px; }
+.run-body summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
 .theme { background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -298,13 +317,20 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
       <span class="runner-next" id="runnerNext"></span>
     </div>
     <div class="runner-now" id="runnerNow"></div>
+    <h3><span id="runnerIssuesTitle">Open issues</span><span class="note-inline" id="runnerIssuesNote"></span></h3>
+    <div class="scroll" id="runnerIssues"></div>
     <h3>Recent runs<span id="runnerRunsNote"></span></h3>
     <div class="scroll" id="runnerRuns"></div>
-    <div class="grid two">
-      <div><h3 id="runnerWtTitle">Worktrees</h3><div class="scroll" id="runnerWt"></div></div>
-      <div><h3>cron.log</h3><pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div></div>
-    </div>
+    <h3>cron.log</h3><pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div>
   </section>
+
+  <dialog class="modal" id="runModal" aria-labelledby="runModalTitle">
+    <div class="modal-head">
+      <h2 id="runModalTitle">Run</h2>
+      <button class="theme" id="runClose" type="button">Close</button>
+    </div>
+    <div class="run-body" id="runBody"></div>
+  </dialog>
 
   <section class="grid two section">
     <div class="card"><h2>Disks</h2><div id="disks"></div></div>
@@ -629,6 +655,131 @@ const issueLink = x => {
   return x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
 };
 
+const logName = p => p ? p.split("/").pop() : "";
+
+// Where an issue is in the runner's label lifecycle (see agent-runner/README.md)
+const ISSUE_STATE = {
+  wip: ["busy", "Working"], queued: ["queued", "Queued"], needs_human: ["waiting", "Needs you"],
+  failed: ["stopped", "Failed"], pr: ["good", "PR to review"], closed: ["idle", "Closed"],
+};
+function issueChip(state) {
+  const [dot, label] = ISSUE_STATE[state] || ["idle", "No agent label"];
+  return `<span class="chip"><span class="dot ${dot}" aria-hidden="true"></span>${esc(label)}</span>`;
+}
+const tag = l => {
+  const color = /^[0-9a-f]{6}$/i.test(l.color || "") ? "#" + l.color : "var(--muted)";
+  return `<span class="tag"><i style="background:${color}"></i>${esc(l.name)}</span>`;
+};
+
+function renderIssues(r, now) {
+  const gh = r.github, rows = r.issues;
+  $("runnerIssuesTitle").textContent = `Open issues (${rows.length})`;
+  $("runnerIssuesNote").textContent = [
+    !gh ? "loading from GitHub…" : gh.error ? "GitHub: " + gh.error : "from GitHub " + dur(now - gh.time) + " ago",
+    r.worktrees + (r.worktrees === 1 ? " worktree" : " worktrees"),
+  ].join(" · ");
+  const queued = rows.filter(x => x.state === "queued").map(x => "#" + x.issue);
+  const startBtn = () => {
+    const why = r.running ? "A run is in progress; queued issues wait for the next tick"
+      : r.can_start !== true ? "Can't start runs from here: " + r.can_start : "";
+    return `<button type="button" class="hib-btn go" data-queued="${esc(queued.join(", "))}"${why ? ` disabled title="${esc(why)}"` : ' title="Start agent-runner now instead of waiting for the next cron tick"'}>Run now</button>`;
+  };
+  $("runnerIssues").innerHTML = rows.length ? `<table class="tbl issues"><colgroup><col><col style="width:124px"><col style="width:64px"><col style="width:88px"><col style="width:150px"><col style="width:84px"></colgroup>
+    <thead><tr><th>Issue</th><th>State</th><th>PR</th><th class="num">Worktree</th><th>Last run</th><th></th></tr></thead><tbody>` +
+    rows.map(x => {
+      const wt = x.worktree, run = x.last_run;
+      return `<tr>
+      <td title="${esc(x.title || "")}"><div>${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl">${esc(x.title || "")}</span></div>
+        ${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : ""}</td>
+      <td>${issueChip(x.state)}</td>
+      <td>${x.pr ? `<a href="${esc(x.pr.url)}" target="_blank" rel="noopener">#${x.pr.number}</a>${x.pr.isDraft ? ' <span class="dim">draft</span>' : ""}` : '<span class="dim">–</span>'}</td>
+      <td class="num" title="${wt ? esc(wt.path + " · " + wt.branch) : "No worktree"}">${wt ? (wt.activity ? dur(now - wt.activity) + " ago" : "yes") : '<span class="dim">–</span>'}</td>
+      <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td>
+      <td class="num">${x.state === "queued" ? startBtn() : ""}</td></tr>`;
+    }).join("") + "</tbody></table>"
+    : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading…"}</div>`;
+}
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("#runnerIssues button.go");
+  if (!b) return;
+  if (!confirm(`Start agent-runner now?\n\nIt picks up every queued issue (${b.dataset.queued}), the same as the next cron tick would. Output goes to cron.log.`)) return;
+  b.disabled = true; b.textContent = "Starting…";
+  try {
+    const r = await fetch("api/runner/start", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Dashboard": "1" }, body: "{}",
+    });
+    const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
+    if (!r.ok) alert("Couldn't start it: " + res.message);
+  } catch (err) {
+    alert("Couldn't reach the dashboard server.");
+  }
+  setTimeout(poll, 1500);
+});
+
+// Run details: click a recent run (or an issue's last run).
+const runModal = $("runModal");
+let runReq = 0;
+async function openRun(name) {
+  const r = last && last.runner;
+  const x = r && r.runs.find(x => logName(x.log) === name);
+  if (!x) return;
+  const req = ++runReq;
+  $("runModalTitle").textContent = `Run · ${x.repo}#${x.issue}`;
+  const head = `<div class="runner-now">${runChip(x.status)}<span class="sep">•</span>${issueLink(x)}
+    <span class="ttl" title="${esc(x.title || "")}">${esc(x.title || "")}</span></div>`;
+  $("runBody").innerHTML = head + '<div class="note">Loading…</div>';
+  if (!runModal.open) runModal.showModal();
+  let d;
+  try {
+    const res = await fetch("api/runner/run?log=" + encodeURIComponent(name), { cache: "no-store", headers: { "X-Dashboard": "1" } });
+    d = await res.json();
+    if (!res.ok) throw new Error(d.message || "HTTP " + res.status);
+  } catch (err) {
+    if (req === runReq) $("runBody").innerHTML = head + `<div class="note">Couldn't load the run: ${esc(err.message)}</div>`;
+    return;
+  }
+  if (req !== runReq) return;
+  const wt = `${r.home}/worktrees/${x.repo}-${x.issue}`;
+  const s = x.session;
+  const facts = [
+    ["Started", clock(x.started)],
+    ["Took", x.ended ? dur(x.ended - x.started) + " · ended " + clock(x.ended) : x.status === "running" ? "running for " + durSec(Date.now() / 1000 - x.started) : "–"],
+    x.cost != null && ["Cost", "$" + x.cost.toFixed(2) + (x.turns ? " · " + x.turns + " turns" : "")],
+    d.models.length && ["Model", d.models.join(", ")],
+    s && ["Now", `${STATUS[s.status] || s.status}${sessionDetail(s) ? " · " + sessionDetail(s) : ""}`],
+    d.session_id && ["Resume", `cd ${home(wt)} && claude --resume ${d.session_id}`],
+    ["Log", `${home(d.log)} · ${bytes(d.size)}`],
+  ].filter(Boolean);
+  const section = (title, html) => `<div><h3>${esc(title)}</h3>${html}</div>`;
+  let raw = d.raw;
+  try { raw = JSON.stringify(JSON.parse(raw), null, 2); } catch (e) {}
+  $("runBody").innerHTML = head +
+    `<dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
+    (!d.size ? '<div class="note">The log is written when the run ends.</div>' : "") +
+    (d.question ? section("Question", `<div class="md">${esc(d.question)}</div>`) : "") +
+    (d.summary ? section(d.status === "needs_human" ? "Summary" : "Summary (PR description)", `<div class="md">${esc(d.summary)}</div>`) : "") +
+    (d.decisions.length ? section("Decisions", `<ul>${d.decisions.map(t => `<li>${esc(t)}</li>`).join("")}</ul>`) : "") +
+    (d.result ? section("Result", `<div class="md">${esc(d.result)}</div>`) : "") +
+    (d.denials.length ? section(`Permission denials (${d.denials.length})`, `<ul>${d.denials.map(p => `<li><b>${esc(p.tool)}</b> ${esc(p.detail)}</li>`).join("")}</ul>`) : "") +
+    (d.cron.length ? section("cron.log", `<pre class="log">${d.cron.map(esc).join("\n")}</pre>`) : "") +
+    (d.size ? `<details><summary>Raw log${d.truncated ? " (first " + bytes(d.raw.length) + ")" : ""}</summary><pre class="log">${esc(raw)}</pre></details>` : "");
+}
+document.addEventListener("click", e => {
+  const row = e.target.closest("#runnerCard [data-log]");
+  if (!row || e.target.closest("a, button")) return;
+  openRun(row.dataset.log);
+});
+document.addEventListener("keydown", e => {
+  const row = e.target.closest && e.target.closest("#runnerCard [data-log]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRun(row.dataset.log); }
+});
+$("runClose").onclick = () => runModal.close();
+runModal.onclick = e => {
+  const r = runModal.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) runModal.close();
+};
+
 function renderRunner(d) {
   const r = d.runner;
   $("runnerCard").hidden = !r;
@@ -652,26 +803,18 @@ function renderRunner(d) {
       <span class="d">${r.last_log_line ? "last logged " + dur(now - r.last_log_line) + " ago" : ""}</span>`;
   }
 
-  $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl"><colgroup><col style="width:120px"><col style="width:30%"><col style="width:112px"><col style="width:64px"><col style="width:64px"><col></colgroup>
+  renderIssues(r, now);
+
+  $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl runs"><colgroup><col style="width:120px"><col style="width:30%"><col style="width:112px"><col style="width:64px"><col style="width:64px"><col></colgroup>
     <thead><tr><th>Started</th><th>Issue</th><th>Outcome</th><th class="num">Took</th><th class="num">Cost</th><th>Summary</th></tr></thead><tbody>` +
-    r.runs.map(x => `<tr title="log: ${esc(x.log)}${x.turns ? " · " + x.turns + " turns" : ""}">
+    r.runs.map(x => `<tr tabindex="0" data-log="${esc(logName(x.log))}" title="Show run details">
       <td>${clock(x.started)}</td>
       <td title="${esc(x.title || "")}">${issueLink(x)} ${esc(x.title || "")}</td>
       <td>${runChip(x.status)}</td>
       <td class="num">${x.ended ? dur(x.ended - x.started) : x.status === "running" ? '<span class="liveRun"></span>' : "–"}</td>
       <td class="num">${x.cost != null ? "$" + x.cost.toFixed(2) : "–"}</td>
-      <td title="${esc(x.summary || "")}">${esc(x.summary || "")}</td></tr>`).join("") +
+      <td>${esc(x.summary || "")}</td></tr>`).join("") +
     "</tbody></table>" : '<div class="note">No runs yet</div>';
-
-  const wt = r.worktrees;
-  $("runnerWtTitle").textContent = `Worktrees (${wt.length})`;
-  $("runnerWt").innerHTML = wt.length ? `<table class="tbl"><colgroup><col style="width:34%"><col><col style="width:84px"></colgroup>
-    <thead><tr><th>Issue</th><th>Last run</th><th class="num">Touched</th></tr></thead><tbody>` +
-    wt.map(w => `<tr title="${esc(w.path)} · ${esc(w.branch)}">
-      <td title="${esc(w.title || "")}">${w.issue ? issueLink(w) : esc(w.name)} <span class="dim">${esc(w.title || "")}</span></td>
-      <td>${w.last_status ? runChip(w.last_status) : '<span class="dim">–</span>'}</td>
-      <td class="num">${w.activity ? dur(now - w.activity) + " ago" : "–"}</td></tr>`).join("") +
-    "</tbody></table>" : '<div class="note">None; each is removed once its issue is closed</div>';
 
   const el = $("runnerLog");
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
