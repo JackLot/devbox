@@ -13,6 +13,7 @@ import json
 import os
 import pwd
 import re
+import signal
 import socket
 import subprocess
 import threading
@@ -170,6 +171,12 @@ def read_proc(pid):
         cmd = ""
     return {"pid": int(pid), "comm": comm, "ticks": ticks, "start": start, "rss": rss,
             "user": username(uid), "cmd": (cmd or "[%s]" % comm)[:160]}
+
+
+def start_ticks(p):
+    """Process start time in clock ticks since boot: with the pid, identifies
+    one process even after the pid is reused."""
+    return round(p["start"] * CLK_TCK)
 
 
 def processes():
@@ -377,7 +384,7 @@ def transcript_summary(path):
         lines = f.read().split(b"\n")
     if st.st_size > TRANSCRIPT_TAIL:
         lines = lines[1:]  # first line is probably cut off
-    want = ("title", "prompt", "mode", "branch", "action", "reply", "reply_time", "last_activity", "recap", "recap_time")
+    want = ("title", "custom_title", "prompt", "mode", "branch", "action", "reply", "reply_time", "last_activity", "recap", "recap_time")
     out = {}
     for raw in reversed(lines):
         if len(out) == len(want):
@@ -389,8 +396,8 @@ def transcript_summary(path):
         kind = d.get("type")
         if kind == "ai-title" and "title" not in out:
             out["title"] = d.get("aiTitle")
-        elif kind == "custom-title" and "title" not in out:
-            out["title"] = d.get("customTitle")
+        elif kind == "custom-title" and "custom_title" not in out:
+            out["custom_title"] = d.get("customTitle")  # set by /rename
         elif kind == "last-prompt" and "prompt" not in out:
             out["prompt"] = (d.get("lastPrompt") or "")[:300]
         elif kind == "permission-mode" and "mode" not in out:
@@ -486,7 +493,7 @@ def claude_sessions(procs, rows):
         # session is live only if the recorded process start time matches.
         # Dead ones show as stopped for a day, then drop off.
         p = procs.get(pid)
-        alive = p and (not s.get("procStart") or str(round(p["start"] * CLK_TCK)) == str(s["procStart"]))
+        alive = p and (not s.get("procStart") or str(start_ticks(p)) == str(s["procStart"]))
         if not alive:
             if time.time() - (s.get("updatedAt") or 0) / 1000 > STOPPED_KEEP:
                 continue
@@ -495,11 +502,17 @@ def claude_sessions(procs, rows):
         transcript = find_transcript(s["sessionId"]) if s.get("sessionId") else None
         summary = (safe(transcript_summary, transcript) if transcript else None) or {}
         row = by_pid.get(pid, {}) if p else {}
-        # The generated title sometimes gets replaced by the session's
-        # auto-name; the opening prompt says more in that case.
-        title = summary.get("title")
-        if not title or title == s.get("name"):
-            title = (safe(first_prompt, transcript) if transcript else None) or title
+        # Title precedence: a /rename, then the generated title, then the
+        # opening prompt. The generated title sometimes gets replaced by the
+        # session's auto-name, which says less than the prompt.
+        if s.get("nameSource") in ("user", "peer") and s.get("name"):
+            title = s["name"]
+        elif summary.get("custom_title"):
+            title = summary["custom_title"]
+        else:
+            title = summary.get("title")
+            if not title or title == s.get("name"):
+                title = (safe(first_prompt, transcript) if transcript else None) or title
         out.append({
             "pid": pid,
             "session_id": s.get("sessionId"),
@@ -524,6 +537,7 @@ def claude_sessions(procs, rows):
             "last_activity": summary.get("last_activity"),
             "cpu": row.get("cpu"),
             "rss": row.get("rss"),
+            "start": row.get("start"),
         })
     order = {"waiting": 0, "busy": 1, "idle": 2, "shell": 2, "stopped": 4}
     out.sort(key=lambda s: (order.get(s["status"], 3), -(s["status_since"] or 0)))
@@ -615,7 +629,8 @@ class Sampler:
             if prev and pid in prev["ticks"]:
                 cpu_p = round(100.0 * (p["ticks"] - prev["ticks"][pid]) / CLK_TCK / dt, 1)
             rows.append({"pid": pid, "user": p["user"], "cpu": cpu_p, "rss": p["rss"],
-                         "age": max(0, up - p["start"]), "cmd": p["cmd"], "comm": p["comm"]})
+                         "age": max(0, up - p["start"]), "start": start_ticks(p),
+                         "cmd": p["cmd"], "comm": p["comm"]})
         top_cpu = sorted((r for r in rows if r["cpu"]), key=lambda r: -r["cpu"])[:TOP_N]
         top_mem = sorted(rows, key=lambda r: -r["rss"])[:TOP_N]
 
@@ -632,7 +647,7 @@ class Sampler:
             "host": {"hostname": socket.gethostname(), "kernel": os.uname().release,
                      "arch": os.uname().machine, "nproc": NPROC, "uptime": up,
                      "boot_time": now - up, "slept": safe(slept_seconds),
-                     "instance": self.instance},
+                     "instance": self.instance, "user": ME, "pid": os.getpid()},
             "cpu": {"percent": cpu_pct, "cores": cores, "load": load},
             "memory": mem,
             "swap": sw,
@@ -655,6 +670,56 @@ class Sampler:
     def get(self):
         with self.lock:
             return self.snapshot
+
+
+# ---- stopping processes -------------------------------------------------------
+# POST /api/stop sends SIGTERM to one of this user's processes. The kernel
+# already limits us to our own user's processes; the checks below make sure
+# the request comes from this dashboard's own page and not from another site
+# open in the same browser.
+
+ME = pwd.getpwuid(os.getuid()).pw_name
+
+
+def local_addresses():
+    out = subprocess.run(["ip", "-o", "addr", "show"], capture_output=True, text=True, timeout=2).stdout
+    return {line.split()[3].split("/")[0] for line in out.splitlines() if len(line.split()) > 3}
+
+
+def allowed_host(host, instance_name):
+    """Host header check against DNS rebinding: a site whose name resolves to
+    this box still sends its own name, which isn't one of ours."""
+    host = host.lower()
+    if host.startswith("["):  # [ipv6]:port
+        host = host[1:host.find("]")]
+    elif host.count(":") == 1:
+        host = host.split(":")[0]
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    names = {socket.gethostname().lower(), socket.gethostname().split(".")[0].lower()}
+    if instance_name:
+        names.add(instance_name.lower())
+    names.update(h.strip().lower() for h in os.environ.get("DASHBOARD_HOSTS", "").split(",") if h.strip())
+    # Bare names, and Tailscale MagicDNS names (<name>.<tailnet>.ts.net)
+    if host in names or (host.split(".")[0] in names and host.endswith(".ts.net")):
+        return True
+    return host in (safe(local_addresses) or set())
+
+
+def stop_process(pid, start):
+    if pid <= 1 or pid == os.getpid():
+        return 403, "refusing to stop that process"
+    p = safe(read_proc, str(pid))
+    if not p or start_ticks(p) != start:
+        return 409, "process already exited (or its pid was reused)"
+    if p["user"] != ME:
+        return 403, "owned by %s; the dashboard runs as %s" % (p["user"], ME)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError as e:
+        return 500, str(e)
+    print("stopped pid %d (%s) via dashboard" % (pid, p["cmd"][:120]), flush=True)
+    return 200, "sent SIGTERM to pid %d" % pid
 
 
 # ---- http ---------------------------------------------------------------------
@@ -689,6 +754,32 @@ class Handler(BaseHTTPRequestHandler):
             self.json({"path": IDLE_LOG, "available": lines is not None, "lines": lines or []})
         else:
             self.send(404, b"not found\n", "text/plain")
+
+    def do_POST(self):
+        if urlparse(self.path).path != "/api/stop":
+            return self.send(404, b"not found\n", "text/plain")
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin")
+        instance = (self.sampler.instance or {}).get("name")
+        # A custom header can't be sent cross-origin without a CORS preflight,
+        # which this server never approves; Origin/Host catch the rest.
+        if self.headers.get("X-Dashboard") != "1":
+            return self.reply(403, "missing X-Dashboard header")
+        if not origin or urlparse(origin).netloc != host:
+            return self.reply(403, "cross-origin request refused")
+        if not allowed_host(host, instance):
+            return self.reply(403, "unknown Host %r (add it to DASHBOARD_HOSTS)" % host)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(min(length, 4096)))
+            pid, start = int(body["pid"]), int(body["start"])
+        except (ValueError, KeyError, TypeError):
+            return self.reply(400, "expected JSON {pid, start}")
+        self.reply(*stop_process(pid, start))
+
+    def reply(self, code, message):
+        body = json.dumps({"ok": code == 200, "message": message}).encode()
+        self.send(code, body, "application/json")
 
 
 def main():
