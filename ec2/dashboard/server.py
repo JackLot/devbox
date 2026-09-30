@@ -347,6 +347,7 @@ def idle_state():
 
 CLAUDE_DIR = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".claude")
 TRANSCRIPT_TAIL = 1 << 20
+STOPPED_KEEP = 86400
 _transcripts = {}  # path -> (mtime, size, summary)
 
 
@@ -421,6 +422,35 @@ def transcript_summary(path):
     return out
 
 
+_first_prompts = {}  # path -> first prompt; it never changes
+
+
+def first_prompt(path):
+    """The first thing the user typed in a session (skips slash-command wrappers)."""
+    if path in _first_prompts:
+        return _first_prompts[path]
+    found = None
+    with open(path, "rb") as f:
+        for n, raw in enumerate(f):
+            if n > 5000:
+                break
+            try:
+                d = json.loads(raw)
+            except ValueError:
+                continue
+            if d.get("type") != "user" or d.get("isMeta") or d.get("isSidechain"):
+                continue
+            content = (d.get("message") or {}).get("content")
+            if isinstance(content, list):
+                content = " ".join(b.get("text", "") for b in content if b.get("type") == "text")
+            text = _plain(content or "") if isinstance(content, str) else ""
+            if text and not text.startswith("<"):
+                found = text[:300]
+                break
+    _first_prompts[path] = found
+    return found
+
+
 def find_transcript(session_id):
     for proj in safe(os.listdir, os.path.join(CLAUDE_DIR, "projects")) or []:
         path = os.path.join(CLAUDE_DIR, "projects", proj, session_id + ".jsonl")
@@ -452,25 +482,34 @@ def claude_sessions(procs, rows):
         if not isinstance(s, dict) or not isinstance(s.get("pid"), int):
             continue
         pid = s["pid"]
-        # Files outlive crashed sessions, and pids get reused: require the
-        # recorded process start time to match the live process.
+        # Files outlive crashed or killed sessions, and pids get reused: a
+        # session is live only if the recorded process start time matches.
+        # Dead ones show as stopped for a day, then drop off.
         p = procs.get(pid)
-        if not p or (s.get("procStart") and str(round(p["start"] * CLK_TCK)) != str(s["procStart"])):
-            continue
-        cwd = s.get("cwd") or safe(os.readlink, "/proc/%d/cwd" % pid)
+        alive = p and (not s.get("procStart") or str(round(p["start"] * CLK_TCK)) == str(s["procStart"]))
+        if not alive:
+            if time.time() - (s.get("updatedAt") or 0) / 1000 > STOPPED_KEEP:
+                continue
+            s["status"], p = "stopped", None
+        cwd = s.get("cwd") or (safe(os.readlink, "/proc/%d/cwd" % pid) if p else None)
         transcript = find_transcript(s["sessionId"]) if s.get("sessionId") else None
         summary = (safe(transcript_summary, transcript) if transcript else None) or {}
-        row = by_pid.get(pid, {})
+        row = by_pid.get(pid, {}) if p else {}
+        # The generated title sometimes gets replaced by the session's
+        # auto-name; the opening prompt says more in that case.
+        title = summary.get("title")
+        if not title or title == s.get("name"):
+            title = (safe(first_prompt, transcript) if transcript else None) or title
         out.append({
             "pid": pid,
             "session_id": s.get("sessionId"),
             "name": s.get("name"),
-            "title": summary.get("title"),
+            "title": title,
             "cwd": cwd,
             "branch": safe(git_branch, cwd) if cwd else summary.get("branch"),
             "status": s.get("status") or "unknown",
             "waiting_for": s.get("waitingFor"),
-            "status_since": (s.get("statusUpdatedAt") or 0) / 1000 or None,
+            "status_since": (s.get("statusUpdatedAt") or s.get("updatedAt") or 0) / 1000 or None,
             "started": (s.get("startedAt") or 0) / 1000 or None,
             "kind": s.get("kind"),
             "tmux": s.get("tmux"),
@@ -486,7 +525,7 @@ def claude_sessions(procs, rows):
             "cpu": row.get("cpu"),
             "rss": row.get("rss"),
         })
-    order = {"waiting": 0, "busy": 1, "idle": 2}
+    order = {"waiting": 0, "busy": 1, "idle": 2, "shell": 2, "stopped": 4}
     out.sort(key=lambda s: (order.get(s["status"], 3), -(s["status_since"] or 0)))
     return out
 

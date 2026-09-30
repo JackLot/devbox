@@ -5,3 +5,6 @@
 .zshrc.local
 .tmux.local.conf
 conf.d/
+
+# Python bytecode
+__pycache__/
