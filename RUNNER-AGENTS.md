@@ -17,26 +17,20 @@ Read this before starting; add to it when you learn something a future run would
   snapshot saved from `server.Sampler().get()` (sample twice, a second apart). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
   make the stub element's `querySelector` return an object, or `spark()` throws.
+- There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
+  CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
   copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `index.html`).
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
   `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
 - `git -C <path> ...`, `cd <dir> && git ...` and `bash -n` are refused; run plain `git ...` from
-  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess.
+  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess;
+  so does `git merge` (refused as plain Bash, as are `rebase` and `merge-tree`), e.g. to merge `main`
+  into the branch when the reviewer says code changed since the PR was opened.
 - To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
   port 0 in a thread inside `python3 -c` and call it with `urllib`. Stub `subprocess.Popen`
   (after the first `sample()`) before exercising `/api/runner/start`, and remember it appends
   to the real `~/.agent-runner/cron.log`; you are yourself a runner run holding the lock.
-  Endpoints that don't need a sample can skip it: set `server.Handler.sampler` to a stub.
-- `tmux capture-pane` and chained shell commands over `~/.claude` need approval you won't get;
-  read `~/.claude/sessions/*.json` and transcripts with Read/Glob or a Python one-liner instead.
-- `gh pr view` run directly needs approval, so an earlier run's PR description may be out of
-  reach; work from `git log`/`git show` on the branch and the issue comments in your prompt.
-- `git merge`, `git rebase`, `git merge-tree`, `git checkout <rev> -- ...`, `git apply` and
-  `patch` all need approval. To bring `main` into your branch ("incorporate the changes made
-  since"), overwrite each changed file with `git show main:<path> > <path>` (redirection inside
-  the worktree is allowed), re-apply your branch's `git diff main...HEAD` hunks with Edit, and
-  commit. The result is a plain commit, not a merge; GitHub may still report conflicts.
 - When the reviewer says they made tweaks "in the worktree", they're usually uncommitted,
   and the runner's `git reset --hard` wiped them before you started. Cursor keeps local
   history: find the `~/.cursor-server/data/User/History/*/entries.json` whose `resource`
