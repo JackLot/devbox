@@ -430,7 +430,7 @@ sudo sed -i 's/^IDLE_MINUTES=.*/IDLE_MINUTES=30/' /etc/devbox/idle.conf
 
 **Dashboard (optional)**
 - [ ] ssm: `sudo bash /home/dev/devbox/ec2/dashboard/install.sh --user dev`, then browse `http://devbox:9999` from the laptop. Re-run it after pulling dashboard changes: the service runs a root-owned copy, never the checkout.
-- [ ] The Auto-hibernate card shows the idle checker's log. It's empty until the first check writes `/var/log/devbox-idle.log` (boxes bootstrapped before that file existed: re-run `bootstrap.sh`).
+- [ ] The Auto-hibernate tile (next to CPU) opens a details modal with the idle checker's log. It's empty until the first check writes `/var/log/devbox-idle.log` (boxes bootstrapped before that file existed: re-run `bootstrap.sh`).
 
 ## 12. Upgrading the instance type (after verification)
 
