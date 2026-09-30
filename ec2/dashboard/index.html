@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>devbox dashboard</title>
+<title>devbox</title>
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:,">
 <style>
 :root {
   color-scheme: light;
@@ -392,6 +393,34 @@ document.addEventListener("click", async e => {
   setTimeout(poll, 800);
 });
 
+// Tab title and favicon lead with whatever needs you, so a background tab
+// is readable at a glance: "1 needs input · devbox", "2 working · devbox".
+const FAVICON_DOT = { waiting: "#fab219", busy: "#3987e5" };
+let tabState = "";
+function updateTab(host, sessions) {
+  const waiting = sessions.filter(s => s.status === "waiting").length;
+  const busy = sessions.filter(s => s.status === "busy").length;
+  const lead = waiting ? `${waiting} needs input` : busy ? `${busy} working` : "";
+  const dot = waiting ? "waiting" : busy ? "busy" : "";
+  const state = lead + "|" + host + "|" + dot;
+  if (state === tabState) return;  // don't churn the favicon every poll
+  tabState = state;
+  document.title = lead ? `${lead} · ${host}` : host;
+  $("favicon").href = favicon(FAVICON_DOT[dot]);
+}
+function favicon(dot) {
+  // Dark tile with three rising bars (a small activity chart); a status dot
+  // in the corner when a session is working or needs input.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="7" fill="#1a1a19"/>
+    <rect x="7" y="17" width="4" height="8" rx="1.5" fill="#86b6ef"/>
+    <rect x="14" y="12" width="4" height="13" rx="1.5" fill="#86b6ef"/>
+    <rect x="21" y="7" width="4" height="18" rx="1.5" fill="#86b6ef"/>
+    ${dot ? `<circle cx="25" cy="25" r="6.5" fill="${dot}" stroke="#1a1a19" stroke-width="2.5"/>` : ""}
+  </svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
+
 function procTable(rows, key) {
   if (!rows || !rows.length) return '<div class="note">Collecting samples…</div>';
   const max = Math.max(...rows.map(r => r[key] || 0)) || 1;
@@ -549,7 +578,7 @@ function render(d) {
   last = d;
   const h = d.host, inst = h.instance || {};
   $("host").textContent = inst.name || h.hostname;
-  document.title = (inst.name || h.hostname.split(".")[0]) + " dashboard";
+  updateTab(inst.name || h.hostname.split(".")[0], d.claude || []);
   const age = Date.now() / 1000 - d.time;
   $("meta").innerHTML = [
     inst.instance_type && `<span><b>${esc(inst.instance_type)}</b> · ${esc(inst.region || "")}</span>`,
