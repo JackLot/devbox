@@ -17,12 +17,16 @@ Read this before starting; add to it when you learn something a future run would
   snapshot saved from `server.Sampler().get()` (sample twice, a second apart). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
   make the stub element's `querySelector` return an object, or `spark()` throws.
+- There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
+  CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
   copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `index.html`).
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
   `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
 - `git -C <path> ...`, `cd <dir> && git ...` and `bash -n` are refused; run plain `git ...` from
-  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess.
+  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess;
+  so does `git merge` (refused as plain Bash, as are `rebase` and `merge-tree`), e.g. to merge `main`
+  into the branch when the reviewer says code changed since the PR was opened.
 - To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
   port 0 in a thread inside `python3 -c` and call it with `urllib`. Stub `subprocess.Popen`
   (after the first `sample()`) before exercising `/api/runner/start`, and remember it appends
@@ -36,6 +40,7 @@ Read this before starting; add to it when you learn something a future run would
   unstaged edits. Check this even when the newest comment asks for nothing new: a re-run with
   no new requests can mean they saved tweaks after your last push (compare entry timestamps
   with the last commit time).
+
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the
