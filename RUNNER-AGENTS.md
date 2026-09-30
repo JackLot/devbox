@@ -29,3 +29,6 @@ Read this before starting; add to it when you learn something a future run would
   (http://devbox:9998) and the stop command (`pkill -f 'server.py --port 9998'`) in prose
   or their own code blocks. Use your actual worktree path (your working directory); it stays in place until the issue
   is closed. Warn that the test dashboard's **Hibernate now** and Stop buttons are live.
+- The reviewer pastes that command into an ssh session on the devbox, which can't open a
+  browser tab, so don't add an auto-open step (`open`, `xdg-open`, or wrapping it in
+  `ssh devbox ... && open ...` from the laptop); they tried it and asked for it to be reverted.
