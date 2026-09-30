@@ -27,6 +27,13 @@ Read this before starting; add to it when you learn something a future run would
   port 0 in a thread inside `python3 -c` and call it with `urllib`. Stub `subprocess.Popen`
   (after the first `sample()`) before exercising `/api/runner/start`, and remember it appends
   to the real `~/.agent-runner/cron.log`; you are yourself a runner run holding the lock.
+- When the reviewer says they made tweaks "in the worktree", they're usually uncommitted,
+  and the runner's `git reset --hard` wiped them before you started. Cursor keeps local
+  history: find the `~/.cursor-server/data/User/History/*/entries.json` whose `resource`
+  ends in your worktree's file path; the newest entry's file in that folder is their last
+  save. Diff it against HEAD and apply it (a `python3 -c` copy; `cp` from outside the
+  worktree is refused). `git fsck` works from a `python3 -c` subprocess too, but won't have
+  unstaged edits.
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the
