@@ -425,7 +425,7 @@ Each check below says what `journalctl -t devbox-idle` should show.
 
 Restore the real window (ssm):
 ```bash
-sudo sed -i 's/^IDLE_MINUTES=.*/IDLE_MINUTES=30/' /etc/devbox/idle.conf
+sudo sed -i 's/^IDLE_MINUTES=.*/IDLE_MINUTES=60/' /etc/devbox/idle.conf
 ```
 
 **Dashboard (optional)**

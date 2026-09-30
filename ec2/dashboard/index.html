@@ -116,6 +116,9 @@ header .meta b { font-weight: 500; color: var(--ink); }
 /* Same gap under the label as the big value leaves on the other tiles. */
 #hibTileS { margin-top: 8px; }
 .hib-tile .steps { max-width: none; margin: 6px 0; }
+.hib-foot { display: flex; align-items: center; gap: 8px; }
+.hib-foot .sub { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hib-foot .hib-btn { flex: none; }
 dialog.modal {
   width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
@@ -313,6 +316,37 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
 .run-body li + li { margin-top: 4px; }
 .run-body .log { height: auto; max-height: 320px; }
 .run-body summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
+/* issue title opens the issue modal */
+.issues .ttl[data-issue] { cursor: pointer; }
+.issues .ttl[data-issue]:hover, .issues .ttl[data-issue]:focus-visible { text-decoration: underline; outline: none; }
+/* phones: the issues table becomes a list of "● repo#N title" rows */
+.issue-list { display: none; }
+.issue-list h3 { margin: 0 0 2px; }
+.irow { display: flex; align-items: center; gap: 10px; padding: 10px 6px; margin: 0 -6px; border-bottom: 1px solid var(--grid); cursor: pointer; border-radius: 4px; }
+.irow:last-child { border-bottom: 0; }
+.irow:hover, .irow:focus-visible { background: var(--page); outline: none; }
+.irow .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.irow .ref { color: var(--ink-2); font-weight: 400; }
+@media (max-width: 760px) {
+  .issues { display: none; }
+  .issue-list { display: block; }
+}
+/* issue modal */
+dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
+.issue-modal .modal-head { align-items: flex-start; }
+.issue-modal .modal-head h2 { line-height: 1.35; }
+.issue-modal .copy .cp { opacity: 1; }
+.issue-modal .run-body .facts { padding-top: 14px; border-top: 1px solid var(--grid); }
+.links { display: flex; flex-wrap: wrap; gap: 8px; }
+.link-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 140px;
+  padding: 10px 14px; border-radius: 8px; background: var(--s1); color: #fff; font-weight: 500; text-decoration: none;
+}
+.link-btn:hover, .link-btn:focus-visible { filter: brightness(1.1); }
+.link-btn.off { background: none; color: var(--muted); border: 1px solid var(--border); }
+.tags.wrap { flex-wrap: wrap; }
+.issue-modal .lastrun { cursor: pointer; }
+.issue-modal .lastrun:hover .dim, .issue-modal .lastrun:focus-visible .dim { color: var(--ink); }
 .theme { background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -322,7 +356,6 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
     <h1 id="host">devbox</h1>
     <div class="meta" id="meta"></div>
     <div class="actions">
-      <button class="hib-btn" id="hibBtn" type="button" hidden>Hibernate now</button>
       <button class="theme" id="theme" type="button">Theme</button>
     </div>
   </header>
@@ -395,6 +428,14 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
     <div class="run-body" id="runBody"></div>
   </dialog>
 
+  <dialog class="modal issue-modal" id="issueModal" aria-labelledby="issueModalTitle">
+    <div class="modal-head">
+      <h2 id="issueModalTitle">Issue</h2>
+      <button class="theme" id="issueClose" type="button">Close</button>
+    </div>
+    <div class="run-body" id="issueBody"></div>
+  </dialog>
+
   <hr class="divider">
 
   <section class="grid tiles">
@@ -404,7 +445,7 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
       <div class="value" id="hibTileV">–</div>
       <div class="sub" id="hibTileSub"></div>
       <div class="steps" id="hibTileSteps" aria-hidden="true"></div>
-      <div class="sub" id="hibTileNext"></div>
+      <div class="hib-foot"><div class="sub" id="hibTileNext"></div><button class="hib-btn" id="hibBtn" type="button" hidden>Hibernate now</button></div>
     </div>
     <div class="card tile"><div class="label">CPU</div><div class="value" id="cpuV">–</div><div class="sub" id="cpuS"></div><div class="spark" id="cpuC"></div></div>
     <div class="card tile"><div class="label">Load (1 min)</div><div class="value" id="loadV">–</div><div class="sub" id="loadS"></div><div class="spark" id="loadC"></div></div>
@@ -801,15 +842,15 @@ function renderCompact(list, now) {
 }
 
 function renderClaude(d) {
-  const list = d.claude;
-  $("claudeCard").hidden = !list || !list.length;
-  if (!list || !list.length) return;
+  const list = d.claude || [];
+  $("claudeCard").hidden = false;
   const now = Date.now() / 1000;
   const n = st => list.filter(s => s.status === st || (st === "idle" && s.status === "shell")).length;
   $("claudeCounts").innerHTML = [["busy", "working"], ["waiting", "need input"], ["idle", "idle"], ["stopped", "stopped"]]
     .map(([st, word]) => n(st) ? `<span class="${st}">${n(st)} ${word}</span>` : "").filter(Boolean).join(" ");
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === claudeView)));
   slogHead();
+  if (!list.length) { $("claude").innerHTML = '<div class="note">No active agents right now</div>'; return; }
   if (claudeView === "compact") { $("claude").innerHTML = renderCompact(list, now); return; }
   $("claude").innerHTML = list.map(s => {
     const title = sessionTitle(s);
@@ -899,24 +940,91 @@ function renderIssues(r, now) {
       const wt = x.worktree, run = x.last_run;
       const wtTitle = wt && `Click to copy: cd ${wt.path}\nBranch ${wt.branch}${wt.activity ? " · last git activity " + dur(now - wt.activity) + " ago" : ""}`;
       return `<tr>
-      <td class="main" title="${esc(x.title || "")}">${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl">${esc(x.title || "")}</span></td>
+      <td class="main" title="${esc(x.title || "")}">${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog">${esc(x.title || "")}</span></td>
       <td>${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'}</td>
       <td>${wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc(wtTitle)}">${esc(wt.path.split("/").pop())}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button>` : '<span class="dim">–</span>'}</td>
       <td><div class="state">${issueState(x)}</div></td>
       <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td></tr>`;
-    }).join("") + "</tbody></table>"
+    }).join("") + "</tbody></table>" +
+    // Phones get a one-line-per-issue list instead of the table; a row opens the issue modal.
+    `<div class="issue-list"><h3>Issues (${open} open)</h3>${rows.map(x => {
+      const [dot, label] = x.last_run ? RUN_STATUS[x.last_run.status] || ["idle", x.last_run.status] : ["idle", "No runs"];
+      return `<div class="irow" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog">
+        <span class="dot ${dot}" role="img" title="Last run: ${esc(label)}" aria-label="Last run: ${esc(label)}"></span>
+        <span class="t"><span class="ref">${esc(issueKey(x))}</span> ${esc(x.title || "")}</span></div>`;
+    }).join("")}</div>`
     : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading issues from GitHub…"}</div>`;
+  renderIssueModal(now);
 }
+
+// Issue details: click an issue's title (or its row on phones).
+const issueKey = x => `${x.repo}#${x.issue}`;
+const issueModal = $("issueModal");
+let issueOpen = null;  // key of the issue shown in the modal
+function openIssue(key) {
+  issueOpen = key;
+  renderIssueModal(Date.now() / 1000);
+  if (issueOpen && !issueModal.open) issueModal.showModal();
+}
+// Re-rendered on every poll while open, so state and last run stay current.
+function renderIssueModal(now) {
+  if (!issueOpen) return;
+  const r = last && last.runner;
+  const x = r && r.issues.find(x => issueKey(x) === issueOpen);
+  if (!x) { if (issueModal.open) issueModal.close(); return; }
+  const wt = x.worktree, run = x.last_run;
+  $("issueModalTitle").textContent = x.title || issueKey(x);
+  const ext = '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M5 2H2v8h8V7M7 2h3v3M10 2L5.5 6.5"/></svg>';
+  const links = [
+    x.url ? `<a class="link-btn" href="${esc(x.url)}" target="_blank" rel="noopener">Issue ${esc(issueKey(x))} ${ext}</a>` : "",
+    x.pr ? `<a class="link-btn" href="${esc(x.pr.url)}" target="_blank" rel="noopener">PR#${x.pr.number}${x.pr.isDraft ? " (draft)" : ""} ${ext}</a>`
+      : '<span class="link-btn off">No PR yet</span>',
+  ].join("");
+  // [label, html]
+  const facts = [
+    ["State", `<div class="state">${issueState(x)}</div>`],
+    ["Tags", x.labels && x.labels.length ? `<div class="tags wrap">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'],
+    wt && wt.activity && ["Git activity", esc(dur(now - wt.activity) + " ago")],
+    ["Last run", run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" role="button" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago · details ›</span></span>` : '<span class="dim">–</span>'],
+    x.updated && ["Updated", esc(clock(Date.parse(x.updated) / 1000))],
+  ].filter(Boolean);
+  // Worktree and branch on one line under the title, like the table's worktree cell
+  const where = wt ? `<div><button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc("Click to copy: cd " + wt.path)}">${esc(home(wt.path))}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button></div>` : "";
+  $("issueBody").innerHTML = where + `<div class="links">${links}</div>` +
+    `<dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
+}
+issueModal.addEventListener("close", () => { issueOpen = null; });
+$("issueClose").onclick = () => issueModal.close();
+issueModal.onclick = e => {
+  const r = issueModal.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) { issueModal.close(); return; }
+  const row = e.target.closest("[data-log]");
+  if (row) openRun(row.dataset.log);
+};
+issueModal.onkeydown = e => {
+  const row = e.target.closest("[data-log]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRun(row.dataset.log); }
+};
+$("runnerIssues").addEventListener("click", e => {
+  const el = e.target.closest("[data-issue]");
+  if (el && !e.target.closest("a, button")) openIssue(el.dataset.issue);
+});
+$("runnerIssues").addEventListener("keydown", e => {
+  const el = e.target.closest("[data-issue]");
+  if (el && e.target === el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openIssue(el.dataset.issue); }
+});
 
 // navigator.clipboard only exists on https/localhost; the dashboard is plain
 // http over Tailscale, so fall back to a hidden textarea + execCommand.
-async function copyText(text) {
+// While a modal dialog is open everything outside it is inert, so the textarea
+// has to go inside the dialog (`host`) or it can't be selected.
+async function copyText(text, host) {
   if (navigator.clipboard && window.isSecureContext) {
     try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
   }
   const ta = document.createElement("textarea");
   ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
-  document.body.appendChild(ta); ta.select();
+  (host || document.body).appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
   let ok = false;
   try { ok = document.execCommand("copy"); } catch (e) {}
   ta.remove();
@@ -925,7 +1033,7 @@ async function copyText(text) {
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-copy]");
   if (!b) return;
-  const ok = await copyText(b.dataset.copy);
+  const ok = await copyText(b.dataset.copy, b.closest("dialog"));
   const was = b.innerHTML;
   // The issues table re-renders every poll; the flash only has to last until then.
   b.classList.add("done"); b.textContent = ok ? "Copied" : "Couldn't copy";
@@ -1103,9 +1211,10 @@ function openHibModal() {
   hibModal.showModal();
   $("log").scrollTop = $("log").scrollHeight;
 }
-$("hibCard").onclick = openHibModal;
+// The tile opens the details modal; its Hibernate now button doesn't.
+$("hibCard").onclick = e => { if (!e.target.closest("button")) openHibModal(); };
 $("hibCard").onkeydown = e => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openHibModal(); }
+  if (e.target === $("hibCard") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openHibModal(); }
 };
 $("hibClose").onclick = () => hibModal.close();
 // Click on the backdrop (outside the dialog box) closes it.

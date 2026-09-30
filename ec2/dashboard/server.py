@@ -263,7 +263,7 @@ def next_idle_check():
 
 
 def idle_conf():
-    conf = {"IDLE_MINUTES": 30, "IDLE_HIBERNATE": "on"}
+    conf = {"IDLE_MINUTES": 60, "IDLE_HIBERNATE": "on"}
     for line in (safe(read, IDLE_CONF) or "").splitlines():
         m = re.match(r"\s*(IDLE_\w+)=(\S*)", line)
         if m:

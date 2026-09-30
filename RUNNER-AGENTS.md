@@ -11,6 +11,7 @@ Read this before starting; add to it when you learn something a future run would
 - Bash commands containing a shell expansion (`$(...)`, `$VAR`) are refused ("Contains
   simple_expansion"), even inside a quoted heredoc. That bites `index.html` edits, where the JS
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
+  `sed -i` chained with `&&` is refused too ("requires approval"); edit docs with the Edit tool.
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
   and run `node --check` on it. To catch runtime errors too, `eval` that script in `node -e`
   with stubbed `document`/`localStorage`/`fetch`/`setInterval` and call `render()` on a
@@ -21,6 +22,8 @@ Read this before starting; add to it when you learn something a future run would
   CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
   copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `index.html`).
+  Inside a `showModal()` dialog the rest of the page is inert, so that fallback's textarea
+  must be appended inside the dialog (pass it as `copyText`'s `host`), or nothing gets copied.
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
   `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
 - `git -C <path> ...`, `cd <dir> && git ...` and `bash -n` are refused; run plain `git ...` from
