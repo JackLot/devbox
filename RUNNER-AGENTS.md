@@ -14,7 +14,11 @@ Read this before starting; add to it when you learn something a future run would
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
   and run `node --check` on it. To catch runtime errors too, `eval` that script in `node -e`
   with stubbed `document`/`localStorage`/`fetch`/`setInterval` and call `render()` on a
-  snapshot saved from `server.Sampler().get()` (sample twice, a second apart).
+  snapshot saved from `server.Sampler().get()` (sample twice, a second apart). Write that
+  harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
+  make the stub element's `querySelector` return an object, or `spark()` throws.
+- The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
+  copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `index.html`).
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
   `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
 - `git -C <path> ...`, `cd <dir> && git ...` and `bash -n` are refused; run plain `git ...` from

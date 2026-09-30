@@ -685,7 +685,7 @@ def github_state(conf):
 
 
 def session_title(session_id):
-    """The --name the runner gave the session ("Issue #7 - title"), from the
+    """The --name the runner gave the session ("devbox#7 - title"), from the
     first lines of its transcript."""
     if session_id in _runner_titles:
         return _runner_titles[session_id]
@@ -705,7 +705,8 @@ def session_title(session_id):
 
 
 def issue_title(name):
-    return re.sub(r"^Issue #\d+ - ", "", name) if name else None
+    # "Issue #7 - " from runners before sessions were named like the issues
+    return re.sub(r"^(?:Issue |[\w.-]+)#\d+ - ", "", name) if name else None
 
 
 def runner_run(path):

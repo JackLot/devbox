@@ -234,9 +234,24 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .runner .log { height: 200px; }
 .runner h3 .note-inline { margin-left: 6px; }
 .dot.queued { background: none; border: 2px solid var(--s1); }
-.issues td { vertical-align: top; }
+.issues td { vertical-align: middle; padding-top: 9px; padding-bottom: 9px; }
+.issues th { font-size: 13px; color: var(--ink-2); font-weight: 600; }
 .issues .ttl { font-weight: 500; }
-.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; white-space: normal; }
+.issues .state { display: flex; align-items: center; gap: 8px; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; white-space: normal; }
+.copy {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); background: none; border: 0;
+  padding: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: copy; text-align: left;
+}
+.copy:hover, .copy:focus-visible { color: var(--ink); text-decoration: underline; outline: none; }
+.copy.done { color: var(--good-ink); text-decoration: none; }
+.copy-btn { font-size: 11px; padding: 0 6px; margin-left: 8px; line-height: 18px; vertical-align: 1px; }
+details.fold > summary { list-style: none; cursor: pointer; display: inline-block; }
+details.fold > summary h3 { display: flex; align-items: center; gap: 6px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary svg { transition: transform .15s; }
+details.fold[open] > summary svg { transform: rotate(90deg); }
+details.fold > summary:hover h3 { color: var(--ink-2); }
 .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
 .tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .runner .go { font-size: 11px; padding: 1px 8px; }
@@ -317,11 +332,14 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
       <span class="runner-next" id="runnerNext"></span>
     </div>
     <div class="runner-now" id="runnerNow"></div>
-    <h3><span id="runnerIssuesTitle">Open issues</span><span class="note-inline" id="runnerIssuesNote"></span></h3>
-    <div class="scroll" id="runnerIssues"></div>
+    <div class="scroll section" id="runnerIssues"></div>
+    <div class="note" id="runnerIssuesNote" hidden></div>
     <h3>Recent runs<span id="runnerRunsNote"></span></h3>
     <div class="scroll" id="runnerRuns"></div>
-    <h3>cron.log</h3><pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div>
+    <details class="fold" id="runnerLogFold">
+      <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>cron.log</h3></summary>
+      <pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div>
+    </details>
   </section>
 
   <dialog class="modal" id="runModal" aria-labelledby="runModalTitle">
@@ -671,34 +689,72 @@ const tag = l => {
   return `<span class="tag"><i style="background:${color}"></i>${esc(l.name)}</span>`;
 };
 
+// The PR the runner opened for an issue, as a link: "PR#17", plus "draft" if it is one.
+const prLink = (pr, text) => `<a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(text || "PR#" + pr.number)}</a>` +
+  (pr.isDraft ? ' <span class="dim">draft</span>' : "");
+const issuePr = x => {
+  const r = last && last.runner;
+  const i = r && r.issues.find(i => i.repo === x.repo && i.issue === x.issue);
+  return i && i.pr;
+};
+
+function issueState(x, startBtn) {
+  // "PR#17 to review" in place of the chip's label when the PR is the state
+  if (x.state === "pr" && x.pr) {
+    return `<span class="chip"><span class="dot good" aria-hidden="true"></span>${prLink(x.pr, `PR#${x.pr.number} to review`)}</span>`;
+  }
+  return issueChip(x.state) + (x.pr ? " " + prLink(x.pr) : "") + (x.state === "queued" ? startBtn() : "");
+}
+
 function renderIssues(r, now) {
   const gh = r.github, rows = r.issues;
-  $("runnerIssuesTitle").textContent = `Open issues (${rows.length})`;
-  $("runnerIssuesNote").textContent = [
-    !gh ? "loading from GitHub…" : gh.error ? "GitHub: " + gh.error : "from GitHub " + dur(now - gh.time) + " ago",
-    r.worktrees + (r.worktrees === 1 ? " worktree" : " worktrees"),
-  ].join(" · ");
+  $("runnerIssuesNote").hidden = !(gh && gh.error);
+  $("runnerIssuesNote").textContent = gh && gh.error ? "Couldn't refresh from GitHub: " + gh.error : "";
   const queued = rows.filter(x => x.state === "queued").map(x => "#" + x.issue);
   const startBtn = () => {
     const why = r.running ? "A run is in progress; queued issues wait for the next tick"
       : r.can_start !== true ? "Can't start runs from here: " + r.can_start : "";
     return `<button type="button" class="hib-btn go" data-queued="${esc(queued.join(", "))}"${why ? ` disabled title="${esc(why)}"` : ' title="Start agent-runner now instead of waiting for the next cron tick"'}>Run now</button>`;
   };
-  $("runnerIssues").innerHTML = rows.length ? `<table class="tbl issues"><colgroup><col><col style="width:124px"><col style="width:64px"><col style="width:88px"><col style="width:150px"><col style="width:84px"></colgroup>
-    <thead><tr><th>Issue</th><th>State</th><th>PR</th><th class="num">Worktree</th><th>Last run</th><th></th></tr></thead><tbody>` +
+  const open = rows.filter(x => x.state !== "closed").length;
+  $("runnerIssues").innerHTML = rows.length ? `<table class="tbl issues"><colgroup><col><col style="width:22%"><col style="width:250px"><col style="width:220px"><col style="width:150px"></colgroup>
+    <thead><tr><th>Issues (${open} open)</th><th>Tags</th><th>Worktree</th><th>State</th><th>Last run</th></tr></thead><tbody>` +
     rows.map(x => {
       const wt = x.worktree, run = x.last_run;
+      const wtTitle = wt && `Click to copy: cd ${wt.path}\nBranch ${wt.branch}${wt.activity ? " · last git activity " + dur(now - wt.activity) + " ago" : ""}`;
       return `<tr>
-      <td title="${esc(x.title || "")}"><div>${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl">${esc(x.title || "")}</span></div>
-        ${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : ""}</td>
-      <td>${issueChip(x.state)}</td>
-      <td>${x.pr ? `<a href="${esc(x.pr.url)}" target="_blank" rel="noopener">#${x.pr.number}</a>${x.pr.isDraft ? ' <span class="dim">draft</span>' : ""}` : '<span class="dim">–</span>'}</td>
-      <td class="num" title="${wt ? esc(wt.path + " · " + wt.branch) : "No worktree"}">${wt ? (wt.activity ? dur(now - wt.activity) + " ago" : "yes") : '<span class="dim">–</span>'}</td>
-      <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td>
-      <td class="num">${x.state === "queued" ? startBtn() : ""}</td></tr>`;
+      <td title="${esc(x.title || "")}">${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl">${esc(x.title || "")}</span></td>
+      <td>${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'}</td>
+      <td>${wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc(wtTitle)}">${esc(home(wt.path))}</button>` : '<span class="dim">–</span>'}</td>
+      <td><div class="state">${issueState(x, startBtn)}</div></td>
+      <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td></tr>`;
     }).join("") + "</tbody></table>"
-    : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading…"}</div>`;
+    : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading issues from GitHub…"}</div>`;
 }
+
+// navigator.clipboard only exists on https/localhost; the dashboard is plain
+// http over Tailscale, so fall back to a hidden textarea + execCommand.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove();
+  return ok;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  const ok = await copyText(b.dataset.copy);
+  const was = b.textContent;
+  // The issues table re-renders every poll; the flash only has to last until then.
+  b.classList.add("done"); b.textContent = ok ? "Copied" : "Couldn't copy";
+  setTimeout(() => { if (b.isConnected) { b.classList.remove("done"); b.textContent = was; } }, 1200);
+});
 
 document.addEventListener("click", async e => {
   const b = e.target.closest("#runnerIssues button.go");
@@ -741,21 +797,24 @@ async function openRun(name) {
   }
   if (req !== runReq) return;
   const wt = `${r.home}/worktrees/${x.repo}-${x.issue}`;
-  const s = x.session;
+  const s = x.session, pr = issuePr(x);
+  const resume = d.session_id && `cd ${home(wt)} && claude --resume ${d.session_id}`;
+  // [label, text] is escaped; [label, null, html] is trusted markup
   const facts = [
     ["Started", clock(x.started)],
     ["Took", x.ended ? dur(x.ended - x.started) + " · ended " + clock(x.ended) : x.status === "running" ? "running for " + durSec(Date.now() / 1000 - x.started) : "–"],
     x.cost != null && ["Cost", "$" + x.cost.toFixed(2) + (x.turns ? " · " + x.turns + " turns" : "")],
     d.models.length && ["Model", d.models.join(", ")],
     s && ["Now", `${STATUS[s.status] || s.status}${sessionDetail(s) ? " · " + sessionDetail(s) : ""}`],
-    d.session_id && ["Resume", `cd ${home(wt)} && claude --resume ${d.session_id}`],
+    pr && ["PR", null, prLink(pr, `PR#${pr.number}`) + (pr.title ? " " + esc(pr.title) : "")],
+    resume && ["Resume", null, `<span class="cmd">${esc(resume)}</span><button type="button" class="theme copy-btn" data-copy="${esc(resume)}" title="Copy the resume command">Copy</button>`],
     ["Log", `${home(d.log)} · ${bytes(d.size)}`],
   ].filter(Boolean);
   const section = (title, html) => `<div><h3>${esc(title)}</h3>${html}</div>`;
   let raw = d.raw;
   try { raw = JSON.stringify(JSON.parse(raw), null, 2); } catch (e) {}
   $("runBody").innerHTML = head +
-    `<dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
+    `<dl class="facts">${facts.map(([k, v, html]) => `<dt>${esc(k)}</dt><dd>${html != null ? html : esc(v)}</dd>`).join("")}</dl>` +
     (!d.size ? '<div class="note">The log is written when the run ends.</div>' : "") +
     (d.question ? section("Question", `<div class="md">${esc(d.question)}</div>`) : "") +
     (d.summary ? section(d.status === "needs_human" ? "Summary" : "Summary (PR description)", `<div class="md">${esc(d.summary)}</div>`) : "") +
@@ -774,6 +833,7 @@ document.addEventListener("keydown", e => {
   const row = e.target.closest && e.target.closest("#runnerCard [data-log]");
   if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openRun(row.dataset.log); }
 });
+$("runnerLogFold").ontoggle = () => { if ($("runnerLogFold").open) $("runnerLog").scrollTop = $("runnerLog").scrollHeight; };
 $("runClose").onclick = () => runModal.close();
 runModal.onclick = e => {
   const r = runModal.getBoundingClientRect();
