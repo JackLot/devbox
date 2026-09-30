@@ -321,6 +321,7 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
 .issues .ttl[data-issue]:hover, .issues .ttl[data-issue]:focus-visible { text-decoration: underline; outline: none; }
 /* phones: the issues table becomes a list of "● repo#N title" rows */
 .issue-list { display: none; }
+.issue-list h3 { margin: 0 0 2px; }
 .irow { display: flex; align-items: center; gap: 10px; padding: 10px 6px; margin: 0 -6px; border-bottom: 1px solid var(--grid); cursor: pointer; border-radius: 4px; }
 .irow:last-child { border-bottom: 0; }
 .irow:hover, .irow:focus-visible { background: var(--page); outline: none; }
@@ -334,6 +335,8 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
 dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
 .issue-modal .modal-head { align-items: flex-start; }
 .issue-modal .modal-head h2 { line-height: 1.35; }
+.issue-modal .copy .cp { opacity: 1; }
+.issue-modal .run-body .facts { padding-top: 14px; border-top: 1px solid var(--grid); }
 .links { display: flex; flex-wrap: wrap; gap: 8px; }
 .link-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 140px;
@@ -944,7 +947,7 @@ function renderIssues(r, now) {
       <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td></tr>`;
     }).join("") + "</tbody></table>" +
     // Phones get a one-line-per-issue list instead of the table; a row opens the issue modal.
-    `<div class="issue-list">${rows.map(x => {
+    `<div class="issue-list"><h3>Issues (${open} open)</h3>${rows.map(x => {
       const [dot, label] = x.last_run ? RUN_STATUS[x.last_run.status] || ["idle", x.last_run.status] : ["idle", "No runs"];
       return `<div class="irow" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog">
         <span class="dot ${dot}" role="img" title="Last run: ${esc(label)}" aria-label="Last run: ${esc(label)}"></span>
@@ -981,13 +984,13 @@ function renderIssueModal(now) {
   const facts = [
     ["State", `<div class="state">${issueState(x)}</div>`],
     ["Tags", x.labels && x.labels.length ? `<div class="tags wrap">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'],
-    ["Worktree", wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="Click to copy: cd ${esc(wt.path)}">${esc(home(wt.path))}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button>` : '<span class="dim">–</span>'],
-    wt && wt.branch && ["Branch", `<span class="cmd">${esc(wt.branch)}</span>`],
     wt && wt.activity && ["Git activity", esc(dur(now - wt.activity) + " ago")],
     ["Last run", run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" role="button" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago · details ›</span></span>` : '<span class="dim">–</span>'],
     x.updated && ["Updated", esc(clock(Date.parse(x.updated) / 1000))],
   ].filter(Boolean);
-  $("issueBody").innerHTML = `<div class="links">${links}</div>` +
+  // Worktree and branch on one line under the title, like the table's worktree cell
+  const where = wt ? `<div><button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc("Click to copy: cd " + wt.path)}">${esc(home(wt.path))}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button></div>` : "";
+  $("issueBody").innerHTML = where + `<div class="links">${links}</div>` +
     `<dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
 }
 issueModal.addEventListener("close", () => { issueOpen = null; });
@@ -1013,13 +1016,15 @@ $("runnerIssues").addEventListener("keydown", e => {
 
 // navigator.clipboard only exists on https/localhost; the dashboard is plain
 // http over Tailscale, so fall back to a hidden textarea + execCommand.
-async function copyText(text) {
+// While a modal dialog is open everything outside it is inert, so the textarea
+// has to go inside the dialog (`host`) or it can't be selected.
+async function copyText(text, host) {
   if (navigator.clipboard && window.isSecureContext) {
     try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
   }
   const ta = document.createElement("textarea");
   ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
-  document.body.appendChild(ta); ta.select();
+  (host || document.body).appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
   let ok = false;
   try { ok = document.execCommand("copy"); } catch (e) {}
   ta.remove();
@@ -1028,7 +1033,7 @@ async function copyText(text) {
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-copy]");
   if (!b) return;
-  const ok = await copyText(b.dataset.copy);
+  const ok = await copyText(b.dataset.copy, b.closest("dialog"));
   const was = b.innerHTML;
   // The issues table re-renders every poll; the flash only has to last until then.
   b.classList.add("done"); b.textContent = ok ? "Copied" : "Couldn't copy";
