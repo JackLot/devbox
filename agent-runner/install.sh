@@ -62,6 +62,17 @@ block=$(
 echo "$block" > "$HOME_DIR/crontab"
 log "installed cron entry (crontab -l; copy in $HOME_DIR/crontab)"
 
+# Headless browser for agents' visual checks (browser/check.mjs): Playwright in
+# browser/node_modules, Chromium in ~/.cache/ms-playwright. Its system libraries come
+# from ec2/bootstrap.sh (`npx playwright install-deps` is apt-only).
+if command -v npm >/dev/null; then
+  (cd "$DIR/browser" && npm ci --silent && npx playwright install chromium >/dev/null) \
+    && log "installed Playwright Chromium for browser/check.mjs" \
+    || log "warning: Playwright setup failed; agents can't take screenshots"
+else
+  log "warning: npm not on PATH; skipping the headless browser (browser/check.mjs)"
+fi
+
 # Checks that the required CLI tools are available on the PATH
 for tool in gh claude jq flock; do
   command -v "$tool" >/dev/null || log "warning: $tool not on PATH"

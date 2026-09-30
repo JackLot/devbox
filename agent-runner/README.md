@@ -37,6 +37,28 @@ a future run would otherwise rediscover, often from your feedback in issue comme
 it and commit it with their change, so it gets reviewed in the PR. See
 [`../RUNNER-AGENTS.md`](../RUNNER-AGENTS.md) for this repo's.
 
+## Visual checks
+
+Agents can't keep a dev server running in the background, so
+[`browser/check.mjs`](browser/check.mjs) does it all in one foreground command: start the
+server, wait for the URL, screenshot each viewport width with Playwright's headless Chromium,
+report console errors, failed requests and 4xx/5xx responses as JSON, then stop the server and
+the browser. Agents open the PNGs with the Read tool, which shows Claude the image. `--script`
+runs a small module against the page first (click a button, open a modal).
+
+```bash
+node ~/devbox/agent-runner/browser/check.mjs --cmd "npm run dev -- --port 5180" \
+  --url http://localhost:5180/ --widths 375,1280
+```
+
+The prompt tells agents to use it for UI changes; it runs under the existing `Bash(node *)`
+permission, so nothing new is allowed. The page may load public hosts (CDNs, fonts) but
+not other localhost ports, private IPs or tailnet names unless passed with `--allow-host`,
+so a page can't reach the dashboard's Stop and Hibernate endpoints on :9999. That guards
+against mistakes, not a hostile issue: the agent can already run arbitrary `node`.
+`install.sh` installs Playwright and Chromium (about 115 MB); the system libraries come from
+`ec2/bootstrap.sh`.
+
 ## When the agent stops to ask
 
 The prompt tells the agent to bias hard toward deciding: when the issue is ambiguous about
