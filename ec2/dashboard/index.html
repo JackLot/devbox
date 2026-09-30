@@ -196,7 +196,12 @@ header .meta b { font-weight: 500; color: var(--ink); }
 @media (max-width: 560px) { .sess .top { flex-wrap: wrap; } .sess .sep { display: none; } .sess .where { flex-basis: 100%; order: 3; } }
 .counts span { white-space: nowrap; }
 .counts { color: var(--ink-2); font-weight: 400; margin-left: 8px; }
-.theme { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+.actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.hib-btn { background: var(--s1); color: #fff; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.hib-btn:hover { filter: brightness(1.1); }
+.hib-btn:disabled { opacity: .6; cursor: default; }
+.banner { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.theme { background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -204,7 +209,10 @@ header .meta b { font-weight: 500; color: var(--ink); }
   <header>
     <h1 id="host">devbox</h1>
     <div class="meta" id="meta"></div>
-    <button class="theme" id="theme" type="button">Theme</button>
+    <div class="actions">
+      <button class="hib-btn" id="hibBtn" type="button" hidden>Hibernate now</button>
+      <button class="theme" id="theme" type="button">Theme</button>
+    </div>
   </header>
 
   <section class="card" id="hibCard" hidden>
@@ -421,6 +429,33 @@ function favicon(dot) {
   return "data:image/svg+xml," + encodeURIComponent(svg);
 }
 
+$("hibBtn").onclick = async () => {
+  const sessions = (last && last.claude) || [];
+  const busy = sessions.filter(s => s.status === "busy").length;
+  const waiting = sessions.filter(s => s.status === "waiting").length;
+  const running = [busy && `${busy} Claude session${busy > 1 ? "s are" : " is"} working`,
+                   waiting && `${waiting} need${waiting > 1 ? "" : "s"} input`].filter(Boolean).join(" and ");
+  const msg = "Hibernate the devbox now?\n\n" +
+    (running ? running + ". They'll pause and resume where they left off on wake.\n\n" : "") +
+    "SSH sessions and this page will disconnect. Wake it with `ssh devbox` or `devbox up`.";
+  if (!confirm(msg)) return;
+  const btn = $("hibBtn");
+  btn.disabled = true; btn.textContent = "Hibernating…";
+  try {
+    const r = await fetch("api/hibernate", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Dashboard": "1" }, body: "{}",
+    });
+    const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
+    if (!r.ok) throw new Error(res.message);
+    hibernating = true; stopPolling();
+    document.querySelector("main").insertAdjacentHTML("afterbegin",
+      `<div class="banner">Hibernating since ${hhmm(Date.now() / 1000)}. This page stops updating; reload it after waking the box.</div>`);
+  } catch (err) {
+    alert("Couldn't hibernate: " + err.message);
+    btn.disabled = false; btn.textContent = "Hibernate now";
+  }
+};
+
 function procTable(rows, key) {
   if (!rows || !rows.length) return '<div class="note">Collecting samples…</div>';
   const max = Math.max(...rows.map(r => r[key] || 0)) || 1;
@@ -590,6 +625,8 @@ function render(d) {
   ].filter(Boolean).join("");
 
   renderIdle(d);
+  // Only on an EC2 devbox (idle checker + instance metadata present)
+  $("hibBtn").hidden = !(d.idle && h.instance && h.instance.instance_id);
   renderClaude(d);
 
   const hist = d.history.rows, T = hist.map(r => r[0]);
@@ -669,7 +706,9 @@ async function pollLog() {
 
 // Poll only while the tab is visible; tick relative times every second.
 let timers = [];
+let hibernating = false;  // after "Hibernate now": stay quiet, even on tab refocus
 function startPolling() {
+  if (hibernating) return;
   stopPolling(); poll().then(pollLog);
   timers = [setInterval(poll, 3000), setInterval(pollLog, 15000), setInterval(tickLive, 1000)];
 }

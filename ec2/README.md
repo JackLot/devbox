@@ -18,7 +18,7 @@ Start with [CHECKLIST.md](CHECKLIST.md) to launch and verify one.
 | Waking up | `ssh devbox` runs `laptop/devbox proxy`, which signs in to SSO if the session expired (browser), starts the instance if needed and waits for sshd |
 | "Active" means | Claude Code heartbeat (managed hooks) in the last 5 min, an SSH session, or 5-min load above 25% of cores |
 | Memory | zram (priority 100) then `/pagefile` (priority 10). `/swap` is owned by `ec2-hibinit-agent` for the hibernation image only; no other swap may have `/swap` in its path (the agent substring-matches it) |
-| Dashboard | Optional `devbox-dashboard.service`: `http://devbox:9999` shows Claude sessions (directory, branch, working / needs you / idle, last prompt, current tool call), CPU/memory/disk/swap, top processes, listening ports and auto-hibernate state with the idle log tail. Installed by [`dashboard/install.sh`](dashboard/install.sh); works on any Linux box with python3. Process command lines and Claude prompts/replies are visible to anyone on the tailnet, and Stop buttons can SIGTERM any `dev` process (Claude sessions included; they resume with `claude --resume`). Stop requests must come from the dashboard's own page (custom header, same-origin, known Host; extra hostnames via `DASHBOARD_HOSTS`) |
+| Dashboard | Optional `devbox-dashboard.service`: `http://devbox:9999` shows Claude sessions (directory, branch, working / needs you / idle, last prompt, current tool call), CPU/memory/disk/swap, top processes, listening ports and auto-hibernate state with the idle log tail. Installed by [`dashboard/install.sh`](dashboard/install.sh); works on any Linux box with python3. Process command lines and Claude prompts/replies are visible to anyone on the tailnet, and Stop buttons can SIGTERM any `dev` process (Claude sessions included; they resume with `claude --resume`). A **Hibernate now** button in the header hibernates immediately through the instance role and logs `dashboard request, hibernating` to the idle log. Stop and hibernate requests must come from the dashboard's own page (custom header, same-origin, known Host; extra hostnames via `DASHBOARD_HOSTS`) |
 | Updates | `devbox-update.timer`: daily `dnf --releasever=latest upgrade` (AL2023 repos are otherwise pinned to the AMI's release) |
 | Secrets at boot | Tailscale auth key read from SSM Parameter Store (`/devbox/tailscale-authkey`), never in user-data |
 
@@ -54,7 +54,7 @@ On the instance, the bootstrap installs:
 | Path | What |
 |---|---|
 | `/usr/local/bin/devbox-idle-check` | Idle detector and self-hibernate |
-| `/var/log/devbox-idle.log` | Idle checker decisions, readable by `dev` (also in `journalctl -t devbox-idle`, which `dev` can't read) |
+| `/var/log/devbox-idle.log` | Idle checker decisions (plus dashboard hibernations), mode 664 group `dev` (also in `journalctl -t devbox-idle`, which `dev` can't read) |
 | `/etc/devbox/idle.conf` | `IDLE_MINUTES`, `IDLE_HIBERNATE=on/off` (not overwritten on re-run) |
 | `/etc/claude-code/managed-settings.d/50-devbox-heartbeat.json` | Hooks that touch `/var/lib/devbox-activity/claude` |
 | `/etc/nftables/devbox.nft` + `devbox-firewall.service` | Host firewall in its own table |

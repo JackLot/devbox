@@ -265,6 +265,8 @@ log "Installing idle auto-hibernate"
 
 install -d -m 755 /etc/devbox /var/lib/devbox-idle
 install -d -m 755 -o "$DEV_USER" -g "$DEV_USER" /var/lib/devbox-activity
+l=/var/log/devbox-idle.log   # dev appends too (dashboard Hibernate button)
+touch $l; chgrp "$DEV_USER" $l; chmod 664 $l
 
 # Written once; your later edits survive re-runs
 [[ -f /etc/devbox/idle.conf ]] || cat > /etc/devbox/idle.conf <<EOF
@@ -279,8 +281,7 @@ cat > /usr/local/bin/devbox-idle-check <<'EOF'
 #!/usr/bin/env bash
 
 # Hibernates this instance after a sustained idle period.
-# Run every 5 minutes by devbox-idle.timer. Decisions: /var/log/devbox-idle.log
-# (also journalctl -t devbox-idle)
+# Run every 5 min by devbox-idle.timer. Log: /var/log/devbox-idle.log + journal
 set -euo pipefail
 
 IDLE_MINUTES=30

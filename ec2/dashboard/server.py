@@ -722,6 +722,42 @@ def stop_process(pid, start):
     return 200, "sent SIGTERM to pid %d" % pid
 
 
+# ---- hibernate ----------------------------------------------------------------
+# Same call the idle checker makes, through the instance role (which only
+# allows stopping instances tagged Name=devbox). The decision goes into the
+# idle checker's log first, so the dashboard's hibernation metrics count it.
+
+def hibernate(instance, dry_run=False):
+    if not instance or not instance.get("instance_id") or not instance.get("region"):
+        return 503, "not on EC2 (no instance metadata)"
+    if not os.access(IDLE_LOG, os.W_OK):
+        return 500, ("can't write %s, so the hibernation wouldn't be logged. Fix (ssm): "
+                     "sudo chgrp %s %s && sudo chmod 664 %s" % (IDLE_LOG, ME, IDLE_LOG, IDLE_LOG))
+    cmd = ["aws", "ec2", "stop-instances", "--hibernate", "--region", instance["region"],
+           "--instance-ids", instance["instance_id"]] + (["--dry-run"] if dry_run else [])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 500, "aws cli failed: %s" % e
+    out = (r.stderr or r.stdout).strip()
+    if dry_run:
+        # EC2 answers a permitted dry run with a DryRunOperation "error"
+        return (200, "dry run ok: the instance role may hibernate this box") if "DryRunOperation" in out \
+            else (500, "dry run failed: " + out[-300:])
+    if r.returncode != 0:
+        return 500, "aws ec2 stop-instances failed: " + out[-300:]
+    # Logged only once EC2 has accepted the request; the box keeps running
+    # for several seconds after this. Same ending as the checker's line, so
+    # the dashboard counts it as a hibernation.
+    msg = "dashboard request, hibernating"
+    subprocess.run(["logger", "-t", "devbox-idle", msg], timeout=5)
+    with open(IDLE_LOG, "a") as f:
+        f.write("%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), msg))
+    os.sync()
+    print("hibernate requested via dashboard", flush=True)
+    return 200, "hibernating"
+
+
 # ---- http ---------------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -756,26 +792,39 @@ class Handler(BaseHTTPRequestHandler):
             self.send(404, b"not found\n", "text/plain")
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/stop":
+        path = urlparse(self.path).path
+        if path not in ("/api/stop", "/api/hibernate"):
             return self.send(404, b"not found\n", "text/plain")
-        host = self.headers.get("Host", "")
-        origin = self.headers.get("Origin")
-        instance = (self.sampler.instance or {}).get("name")
-        # A custom header can't be sent cross-origin without a CORS preflight,
-        # which this server never approves; Origin/Host catch the rest.
-        if self.headers.get("X-Dashboard") != "1":
-            return self.reply(403, "missing X-Dashboard header")
-        if not origin or urlparse(origin).netloc != host:
-            return self.reply(403, "cross-origin request refused")
-        if not allowed_host(host, instance):
-            return self.reply(403, "unknown Host %r (add it to DASHBOARD_HOSTS)" % host)
+        refused = self.refuse_foreign()
+        if refused:
+            return self.reply(403, refused)
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            body = json.loads(self.rfile.read(min(length, 4096)))
+            body = json.loads(self.rfile.read(min(length, 4096)) or b"{}")
+        except ValueError:
+            return self.reply(400, "expected a JSON body")
+        if path == "/api/hibernate":
+            return self.reply(*hibernate(self.sampler.instance, dry_run=body.get("dry_run") is True))
+        try:
             pid, start = int(body["pid"]), int(body["start"])
-        except (ValueError, KeyError, TypeError):
+        except (KeyError, TypeError, ValueError):
             return self.reply(400, "expected JSON {pid, start}")
         self.reply(*stop_process(pid, start))
+
+    def refuse_foreign(self):
+        """Reason to refuse a request that didn't come from this dashboard's
+        own page, or None. A custom header can't be sent cross-origin without
+        a CORS preflight, which this server never approves; Origin and Host
+        catch the rest, including DNS rebinding."""
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin")
+        if self.headers.get("X-Dashboard") != "1":
+            return "missing X-Dashboard header"
+        if not origin or urlparse(origin).netloc != host:
+            return "cross-origin request refused"
+        if not allowed_host(host, (self.sampler.instance or {}).get("name")):
+            return "unknown Host %r (add it to DASHBOARD_HOSTS)" % host
+        return None
 
     def reply(self, code, message):
         body = json.dumps({"ok": code == 200, "message": message}).encode()

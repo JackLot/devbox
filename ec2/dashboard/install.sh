@@ -63,6 +63,8 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=yes
+# The Hibernate button logs to the idle checker's log ("-": fine if absent)
+ReadWritePaths=-/var/log/devbox-idle.log
 
 [Install]
 WantedBy=multi-user.target
