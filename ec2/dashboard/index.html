@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>devbox dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6;      /* series 1: blue */
+  --s2: #eb6834;      /* series 2: orange */
+  --track: #cde2fb;   /* meter track: light step of the blue ramp */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-ink: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --track: #184f95;
+    --good-ink: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --s1: #3987e5;
+  --s2: #d95926;
+  --track: #184f95;
+  --good-ink: #0ca30c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 16px; }
+header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+header .meta { color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+header .meta b { font-weight: 500; color: var(--ink); }
+.stale { color: var(--critical); font-weight: 500; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px; min-width: 0;
+}
+.card h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--ink-2); }
+.grid { display: grid; gap: 12px; }
+.tiles { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 12px 0; }
+.two { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+@media (max-width: 480px) { .two { grid-template-columns: 1fr; } }
+
+/* hibernation */
+.hib { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr); gap: 20px; }
+@media (max-width: 760px) { .hib { grid-template-columns: 1fr; } }
+.hero { font-size: 44px; font-weight: 600; line-height: 1.1; margin: 4px 0 2px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.status svg { flex: none; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin-top: 14px; }
+.facts dt { color: var(--ink-2); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.steps { display: flex; gap: 2px; margin-top: 10px; max-width: 280px; }
+.steps span { flex: 1; height: 8px; background: var(--track); }
+.steps span:first-child { border-radius: 4px 0 0 4px; }
+.steps span:last-child { border-radius: 0 4px 4px 0; }
+.steps span.on { background: var(--s1); }
+.log {
+  margin: 0; height: 240px; overflow: auto; padding: 10px 12px; border-radius: 8px;
+  background: var(--page); border: 1px solid var(--border);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all;
+}
+.log .t { color: var(--muted); }
+.log .hi { font-weight: 600; }
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* tiles */
+.tile .label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+.tile .sub { color: var(--ink-2); font-size: 12px; min-height: 18px; }
+.spark { position: relative; margin-top: 8px; }
+.spark svg { display: block; width: 100%; height: 56px; overflow: visible; }
+.legend { display: flex; gap: 12px; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+.key { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; border-radius: 1px; }
+.tip {
+  position: absolute; top: -6px; transform: translate(-50%, -100%); pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 7px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  font-variant-numeric: tabular-nums; display: none; z-index: 2;
+}
+.meter { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; margin: 6px 0 2px; }
+.meter > i { display: block; height: 100%; border-radius: 4px; background: var(--s1); }
+.meter > i.warn { background: var(--warning); }
+.meter > i.crit { background: var(--critical); }
+.mrow { margin-top: 8px; }
+.mrow .l { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.mrow .l b { color: var(--ink); font-weight: 500; }
+
+/* tables */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+.tbl td { padding: 4px 6px; border-bottom: 1px solid var(--grid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbl tr:last-child td { border-bottom: 0; }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.bar { display: inline-block; height: 6px; border-radius: 0 3px 3px 0; background: var(--s1); vertical-align: middle; margin-right: 6px; }
+.scroll { overflow-x: auto; }
+.section { margin-top: 12px; }
+/* claude sessions */
+.sessions { margin-top: 12px; }
+.sess { padding: 12px 0; border-top: 1px solid var(--grid); display: grid; gap: 4px; }
+.sess:first-of-type { border-top: 0; padding-top: 4px; }
+.sess .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.sess .nm { font-weight: 600; }
+.sess .ttl { color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sess .ids { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.sess .where { color: var(--ink-2); font-size: 13px; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.sess .where code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
+.sess .line { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.sess .line b { font-weight: 500; color: var(--ink-2); }
+.sess .recap { -webkit-line-clamp: 3; color: var(--ink); }
+.sess .age { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.sess .tool { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--page); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; min-width: 104px; }
+.pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--s1); animation: pulse 1.4s ease-in-out infinite; flex: none; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+.counts { color: var(--ink-2); font-weight: 400; margin-left: 8px; }
+.theme { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="host">devbox</h1>
+    <div class="meta" id="meta"></div>
+    <button class="theme" id="theme" type="button">Theme</button>
+  </header>
+
+  <section class="card" id="hibCard" hidden>
+    <div class="hib">
+      <div>
+        <h2>Auto-hibernate</h2>
+        <div class="status" id="hibStatus"></div>
+        <div class="hero" id="hibHero">–</div>
+        <div class="sub" id="hibSub" style="color:var(--ink-2)"></div>
+        <div class="steps" id="hibSteps" aria-hidden="true"></div>
+        <dl class="facts" id="hibFacts"></dl>
+      </div>
+      <div>
+        <h2 id="logTitle">Idle checker log</h2>
+        <pre class="log" id="log"></pre>
+        <div class="note" id="logNote"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card sessions" id="claudeCard" hidden>
+    <h2>Claude sessions<span class="counts" id="claudeCounts"></span></h2>
+    <div id="claude"></div>
+  </section>
+
+  <section class="grid tiles">
+    <div class="card tile"><div class="label">CPU</div><div class="value" id="cpuV">–</div><div class="sub" id="cpuS"></div><div class="spark" id="cpuC"></div></div>
+    <div class="card tile"><div class="label">Load (1 min)</div><div class="value" id="loadV">–</div><div class="sub" id="loadS"></div><div class="spark" id="loadC"></div></div>
+    <div class="card tile"><div class="label">Memory</div><div class="value" id="memV">–</div><div class="sub" id="memS"></div><div class="spark" id="memC"></div></div>
+    <div class="card tile"><div class="label">Network</div><div class="value" id="netV">–</div><div class="sub" id="netS"></div><div class="spark" id="netC"></div>
+      <div class="legend"><span><i class="key" style="background:var(--s1)"></i>Received</span><span><i class="key" style="background:var(--s2)"></i>Sent</span></div></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card"><h2>Disks</h2><div id="disks"></div></div>
+    <div class="card"><h2>Swap</h2><div id="swap"></div></div>
+  </section>
+
+  <section class="grid two section">
+    <div class="card"><h2>Top processes by CPU</h2><div class="scroll" id="topCpu"></div></div>
+    <div class="card"><h2>Top processes by memory</h2><div class="scroll" id="topMem"></div></div>
+  </section>
+
+  <section class="card section"><h2>Listening ports</h2><div class="scroll" id="ports"></div></section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function bytes(n, d = 1) {
+  if (n == null) return "–";
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (Math.abs(n) >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i === 0 ? 0 : d) + " " + u[i];
+}
+const rate = n => n == null ? "–" : bytes(n) + "/s";
+// Durations are minute-granular so the page stays still between polls; only
+// the two live counters (next idle check, Claude heartbeat) use durSec.
+function dur(s) {
+  if (s == null) return "–";
+  s = Math.max(0, s);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return d + "d " + h + "h";
+  if (h) return h + "h " + m + "m";
+  return m ? m + "m" : "<1m";
+}
+function durSec(s) {
+  if (s == null) return "–";
+  s = Math.max(0, Math.round(s));
+  const m = Math.floor(s / 60), sec = s % 60;
+  if (s >= 3600) return dur(s);
+  return m ? m + "m " + String(sec).padStart(2, "0") + "s" : sec + "s";
+}
+const clock = t => t == null ? "–" : new Date(t * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const hhmm = t => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+// Theme toggle: auto -> light -> dark
+const themes = ["auto", "light", "dark"];
+let theme = "auto";
+try { theme = localStorage.getItem("dash-theme") || "auto"; } catch (e) {}
+function applyTheme() {
+  if (theme === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+  $("theme").textContent = "Theme: " + theme;
+}
+$("theme").onclick = () => {
+  theme = themes[(themes.indexOf(theme) + 1) % 3]; applyTheme();
+  try { localStorage.setItem("dash-theme", theme); } catch (e) {}
+};
+applyTheme();
+
+// Status icons: shape + label, never color alone
+const ICON = {
+  good: '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="var(--good)"/><path d="M4 7.2l2 2 4-4.2" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warning: '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1l6.2 11H.8z" fill="var(--warning)"/><path d="M7 5v3.2" stroke="#0b0b0b" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10.2" r=".9" fill="#0b0b0b"/></svg>',
+  off: '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--muted)" stroke-width="1.6"/><path d="M4 10l6-6" stroke="var(--muted)" stroke-width="1.6"/></svg>',
+};
+
+/* Sparkline with a hover crosshair + tooltip. series: [{values, color}] over shared times. */
+function spark(el, times, series, opts = {}) {
+  const W = 300, H = 56, n = times.length;
+  if (n < 2) { el.innerHTML = '<div class="note">Collecting samples…</div>'; return; }
+  let max = opts.max != null ? opts.max : 0;
+  for (const s of series) for (const v of s.values) if (v != null && v > max) max = v;
+  if (opts.ref != null) max = Math.max(max, opts.ref * 1.25);
+  if (!max) max = 1;
+  const t0 = times[0], t1 = times[n - 1];
+  const x = t => (t - t0) / (t1 - t0 || 1) * W;
+  const y = v => H - 2 - (v / max) * (H - 4);
+  let body = `<line x1="0" x2="${W}" y1="${H - 1}" y2="${H - 1}" stroke="var(--axis)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+  if (opts.ref != null) {
+    body += `<line x1="0" x2="${W}" y1="${y(opts.ref)}" y2="${y(opts.ref)}" stroke="var(--muted)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+  }
+  series.forEach((s, si) => {
+    // break the line across gaps (hibernation, restarts)
+    let d = "", pen = false;
+    for (let i = 0; i < n; i++) {
+      const v = s.values[i];
+      const gap = i > 0 && times[i] - times[i - 1] > 30;
+      if (v == null || gap) pen = false;
+      if (v == null) continue;
+      d += (pen ? "L" : "M") + x(times[i]).toFixed(1) + " " + y(v).toFixed(1);
+      pen = true;
+    }
+    if (si === 0 && series.length === 1) {
+      body += `<path d="${d}V${H - 1}H0Z" fill="${s.color}" opacity="0.1" stroke="none"/>`;
+    }
+    body += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  });
+  body += `<line class="xh" y1="0" y2="${H}" stroke="var(--muted)" stroke-width="1" vector-effect="non-scaling-stroke" visibility="hidden"/>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(opts.label || "")}">${body}</svg><div class="tip"></div>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), xh = el.querySelector(".xh");
+  svg.onmousemove = e => {
+    const r = svg.getBoundingClientRect();
+    const tx = t0 + (e.clientX - r.left) / r.width * (t1 - t0);
+    let i = 0, best = Infinity;
+    for (let j = 0; j < n; j++) { const dd = Math.abs(times[j] - tx); if (dd < best) { best = dd; i = j; } }
+    const px = x(times[i]) / W * r.width;
+    xh.setAttribute("x1", x(times[i])); xh.setAttribute("x2", x(times[i])); xh.setAttribute("visibility", "visible");
+    tip.style.display = "block"; tip.style.left = Math.min(Math.max(px, 50), r.width - 50) + "px";
+    tip.innerHTML = hhmm(times[i]) + " · " + series.map(s =>
+      (series.length > 1 ? `<i class="key" style="background:${s.color}"></i>` : "") + esc(opts.fmt(s.values[i]))).join("  ");
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; xh.setAttribute("visibility", "hidden"); };
+}
+
+function meterRow(label, used, total, extra) {
+  const pct = total ? used / total * 100 : 0;
+  const cls = pct >= 90 ? "crit" : pct >= 75 ? "warn" : "";
+  return `<div class="mrow"><div class="l"><span><b>${esc(label)}</b> ${extra || ""}</span>
+    <span>${bytes(used)} / ${bytes(total)} · ${pct.toFixed(0)}%</span></div>
+    <div class="meter" role="meter" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(label)}"><i class="${cls}" style="width:${Math.max(pct, 0.5)}%"></i></div></div>`;
+}
+
+function procTable(rows, key) {
+  if (!rows || !rows.length) return '<div class="note">Collecting samples…</div>';
+  const max = Math.max(...rows.map(r => r[key] || 0)) || 1;
+  return `<table class="tbl"><colgroup><col style="width:64px"><col style="width:72px"><col style="width:${key === "cpu" ? 110 : 64}px"><col style="width:${key === "rss" ? 120 : 76}px"><col style="width:64px"><col></colgroup>
+    <thead><tr><th class="num">PID</th><th>User</th><th class="num">CPU</th><th class="num">Memory</th><th class="num">Age</th><th>Command</th></tr></thead><tbody>` +
+    rows.map(r => {
+      const bar = w => `<span class="bar" style="width:${Math.max(1, w / max * 40)}px"></span>`;
+      const cpu = r.cpu == null ? "–" : r.cpu.toFixed(1) + "%";
+      return `<tr><td class="num">${r.pid}</td><td>${esc(r.user)}</td>
+        <td class="num">${key === "cpu" ? bar(r.cpu) : ""}${cpu}</td>
+        <td class="num">${key === "rss" ? bar(r.rss) : ""}${bytes(r.rss, 0)}</td>
+        <td class="num">${dur(r.age)}</td><td class="cmd" title="${esc(r.cmd)}">${esc(r.cmd)}</td></tr>`;
+    }).join("") + "</tbody></table>";
+}
+
+const home = p => p ? p.replace(/^\/home\/[^/]+(?=\/|$)/, "~") : "–";
+const words = s => String(s).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\s*dialog$/i, "").toLowerCase();
+
+function sessionChip(s) {
+  if (s.status === "busy") return '<span class="chip"><span class="pulse" aria-hidden="true"></span>Working</span>';
+  if (s.status === "waiting") return `<span class="chip">${ICON.warning}Needs you</span>`;
+  if (s.status === "idle") return `<span class="chip">${ICON.off.replace("M4 10l6-6", "")}Idle</span>`;
+  return `<span class="chip">${esc(s.status)}</span>`;
+}
+
+function renderClaude(d) {
+  const list = d.claude;
+  $("claudeCard").hidden = !list || !list.length;
+  if (!list || !list.length) return;
+  const now = Date.now() / 1000;
+  const n = st => list.filter(s => s.status === st).length;
+  $("claudeCounts").textContent = [n("busy") && n("busy") + " working", n("waiting") && n("waiting") + " need you", n("idle") && n("idle") + " idle"].filter(Boolean).join(" · ");
+  $("claude").innerHTML = list.map(s => {
+    const since = s.status_since ? dur(now - s.status_since) : "–";
+    const statusLine = s.status === "busy" ? `working for ${since}` :
+      s.status === "waiting" ? `waiting ${since}` + (s.waiting_for ? " on " + esc(words(s.waiting_for)) : "") :
+      `idle ${since}`;
+    const title = s.title && s.title !== s.name ? `<span class="ttl">${esc(s.title)}</span>` : "";
+    const ts = iso => iso ? Date.parse(iso) / 1000 : 0;
+    const recapT = ts(s.recap_time);
+    const recap = s.recap ? `<div class="line recap"><b>Recap</b> ${esc(s.recap)} <span class="age">${dur(now - recapT)} ago</span></div>` : "";
+    let now_ = "";
+    if (s.status !== "idle" && s.action) {
+      now_ = `<div class="line"><b>Now</b> <span class="tool">${esc(s.action.tool)}</span> ${esc(s.action.detail)}</div>`;
+    } else if (s.reply && (!s.recap || ts(s.reply_time) > recapT)) {
+      now_ = `<div class="line"><b>Last reply</b> ${esc(s.reply)}</div>`;
+    }
+    return `<div class="sess">
+      <div class="top">${sessionChip(s)}<span class="nm">${esc(s.name || "session " + s.pid)}</span>${title}
+        <span class="ids">pid ${s.pid}${s.cpu != null ? " · " + s.cpu.toFixed(1) + "% CPU" : ""}${s.rss ? " · " + bytes(s.rss, 0) : ""}</span></div>
+      <div class="where"><span><code>${esc(home(s.cwd))}</code>${s.branch ? " · " + esc(s.branch) : ""}</span>
+        <span>${statusLine}</span>
+        <span>started ${s.started ? dur(now - s.started) + " ago" : "–"}</span>
+        ${s.mode ? `<span>mode ${esc(s.mode)}</span>` : ""}
+        ${s.tmux ? `<span>tmux ${esc(s.tmux)}</span>` : ""}</div>
+      ${recap}
+      ${s.prompt ? `<div class="line"><b>Asked</b> ${esc(s.prompt)}</div>` : ""}
+      ${now_}
+    </div>`;
+  }).join("");
+}
+
+let last = null, lastFetch = 0;
+
+function renderIdle(d) {
+  const idle = d.idle;
+  $("hibCard").hidden = !idle;
+  if (!idle) return;
+  const now = Date.now() / 1000;
+  let status, hero, sub;
+  if (!idle.enabled) {
+    status = ICON.off + " Paused";
+    hero = "Off";
+    sub = "IDLE_HIBERNATE=off in /etc/devbox/idle.conf";
+  } else if (idle.count > 0) {
+    status = ICON.warning + ` Idle, check ${idle.count} of ${idle.needed}`;
+    hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
+    sub = "until hibernation" + (idle.hibernate_at ? " (~" + hhmm(idle.hibernate_at) + ")" : "") + " unless there's activity";
+  } else {
+    const reason = idle.last_status && /^active \((.*)\)$/.exec(idle.last_status.message);
+    status = ICON.good + " Active" + (reason ? ": " + esc(reason[1]) : "");
+    hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
+    sub = "until hibernation at the earliest, if it goes idle now";
+  }
+  $("hibStatus").innerHTML = status;
+  $("hibHero").textContent = hero;
+  $("hibSub").textContent = sub;
+  $("hibSteps").innerHTML = Array.from({ length: idle.needed }, (_, i) => `<span class="${i < idle.count ? "on" : ""}"></span>`).join("");
+
+  const host = d.host;
+  const facts = [
+    ["Next idle check", "", "liveNext"],
+    ["Last hibernated", idle.last_hibernate ? dur(now - idle.last_hibernate) + " ago · " + clock(idle.last_hibernate) : (idle.log_available ? "not in log" : "–")],
+    ["Awake since", idle.awake_since_estimate ? "~" + clock(idle.awake_since_estimate) + " (" + dur(now - idle.awake_since_estimate) + ")" : clock(host.boot_time) + " (boot)"],
+    ["Hibernations, 7 days", idle.log_available ? String(idle.hibernations_7d) : "–"],
+    host.slept > 60 && ["Hibernated since boot", dur(host.slept)],
+    ["Claude heartbeat", "", "liveBeat"],
+    ["Idle window", idle.idle_minutes + " min · load busy > " + idle.load_busy.toFixed(2)],
+  ].filter(Boolean);
+  $("hibFacts").innerHTML = facts.map(([k, v, id]) => `<dt>${esc(k)}</dt><dd${id ? ` id="${id}"` : ""}>${esc(v)}</dd>`).join("");
+  tickLive();
+}
+
+function tickLive() {
+  const idle = last && last.idle, now = Date.now() / 1000;
+  if (!idle) return;
+  if ($("liveNext")) $("liveNext").textContent = idle.next_check ? "in " + durSec(idle.next_check - now) : "–";
+  if ($("liveBeat")) $("liveBeat").textContent = idle.heartbeat ? durSec(now - idle.heartbeat) + " ago" : "never";
+}
+
+function render(d) {
+  if (!d || !d.host) return;
+  last = d;
+  const h = d.host, inst = h.instance || {};
+  $("host").textContent = inst.name || h.hostname;
+  document.title = (inst.name || h.hostname.split(".")[0]) + " dashboard";
+  const age = Date.now() / 1000 - d.time;
+  $("meta").innerHTML = [
+    inst.instance_type && `<span><b>${esc(inst.instance_type)}</b> · ${esc(inst.region || "")}</span>`,
+    inst.instance_id && `<span>${esc(inst.instance_id)}</span>`,
+    `<span>${h.nproc} vCPU · ${esc(h.arch)}</span>`,
+    `<span>running ${dur(h.uptime - (h.slept || 0))} since boot</span>`,
+    age > 20 ? `<span class="stale">data ${dur(age)} old</span>` : "",
+    d.error ? `<span class="stale">sampler error: ${esc(d.error)}</span>` : "",
+  ].filter(Boolean).join("");
+
+  renderIdle(d);
+  renderClaude(d);
+
+  const hist = d.history.rows, T = hist.map(r => r[0]);
+  const col = i => hist.map(r => r[i]);
+
+  $("cpuV").textContent = d.cpu.percent == null ? "–" : d.cpu.percent.toFixed(0) + "%";
+  $("cpuS").textContent = d.cpu.cores.length ? "per core: " + d.cpu.cores.map(c => c == null ? "–" : c.toFixed(0) + "%").join(" · ") : "";
+  spark($("cpuC"), T, [{ values: col(1), color: "var(--s1)" }], { max: 100, fmt: v => v == null ? "–" : v.toFixed(0) + "%", label: "CPU percent, last hour" });
+
+  const busy = d.idle ? d.idle.load_busy : null;
+  $("loadV").textContent = d.cpu.load[0].toFixed(2);
+  $("loadS").textContent = "5 min " + d.cpu.load[1].toFixed(2) + " · 15 min " + d.cpu.load[2].toFixed(2) +
+    (busy != null ? " · busy line " + busy.toFixed(2) : "");
+  spark($("loadC"), T, [{ values: col(2), color: "var(--s1)" }], { ref: busy, fmt: v => v == null ? "–" : v.toFixed(2), label: "Load average, last hour" });
+
+  const m = d.memory;
+  $("memV").textContent = (m.used / m.total * 100).toFixed(0) + "%";
+  $("memS").textContent = bytes(m.used) + " used · " + bytes(m.available) + " available of " + bytes(m.total);
+  spark($("memC"), T, [{ values: col(3), color: "var(--s1)" }], { max: 100, fmt: v => v == null ? "–" : v.toFixed(0) + "%", label: "Memory used percent, last hour" });
+
+  $("netV").textContent = rate((d.network.rx || 0) + (d.network.tx || 0));
+  $("netS").textContent = "in " + rate(d.network.rx) + " · out " + rate(d.network.tx);
+  spark($("netC"), T, [{ values: col(5), color: "var(--s1)" }, { values: col(6), color: "var(--s2)" }], { fmt: rate, label: "Network received and sent, last hour" });
+
+  $("disks").innerHTML = (d.disks || []).map(x => meterRow(x.mount, x.used, x.total, `<span>${esc(x.device)} · ${esc(x.fstype)}</span>`)).join("") || '<div class="note">No disks found</div>';
+  $("swap").innerHTML = (d.swap || []).map(s => {
+    if (s.role.startsWith("hibernation")) {
+      return `<div class="mrow"><div class="l"><span><b>${esc(s.name)}</b> ${esc(s.role)}</span><span>${bytes(s.size)}</span></div></div>`;
+    }
+    const extra = s.role === "zram" && s.compressed != null
+      ? `zram · ${bytes(s.orig_data)} stored as ${bytes(s.compressed)}` : esc(s.role) + (s.priority != null ? " · priority " + s.priority : "");
+    return meterRow(s.name, s.used, s.size, `<span>${extra}</span>`);
+  }).join("") || '<div class="note">No swap</div>';
+
+  $("topCpu").innerHTML = procTable(d.processes.top_cpu, "cpu");
+  $("topMem").innerHTML = procTable(d.processes.top_mem, "rss");
+
+  $("ports").innerHTML = (d.ports && d.ports.length) ? `<table class="tbl"><colgroup><col style="width:160px"><col style="width:70px"><col style="width:70px"><col style="width:72px"><col></colgroup>
+    <thead><tr><th>Address</th><th class="num">Port</th><th class="num">PID</th><th>User</th><th>Command</th></tr></thead><tbody>` +
+    d.ports.map(p => `<tr><td>${esc(p.addr)}</td><td class="num">${p.port}</td><td class="num">${p.pid || "–"}</td><td>${esc(p.user || "–")}</td>
+      <td class="cmd" title="${esc(p.cmd || "")}">${p.cmd ? esc(p.cmd) : '<span style="color:var(--muted)">owned by another user</span>'}</td></tr>`).join("") +
+    "</tbody></table>" : '<div class="note">None</div>';
+}
+
+async function poll() {
+  try {
+    const r = await fetch("api/stats", { cache: "no-store" });
+    render(await r.json());
+    lastFetch = Date.now();
+  } catch (e) {
+    $("meta").innerHTML = '<span class="stale">Can\'t reach the dashboard server (hibernated?)</span>';
+  }
+}
+
+async function pollLog() {
+  if (!last || !last.idle) return;
+  try {
+    const d = await (await fetch("api/log?n=200", { cache: "no-store" })).json();
+    const el = $("log");
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+    if (!d.available) {
+      el.innerHTML = "";
+      $("logNote").textContent = d.path + " not found yet. It's written by the updated devbox-idle-check (re-run bootstrap.sh over SSM).";
+      return;
+    }
+    el.innerHTML = d.lines.map(l => {
+      const i = l.indexOf(" "), ts = l.slice(0, i), msg = l.slice(i + 1);
+      const t = Date.parse(ts);
+      const shown = isNaN(t) ? esc(ts) : new Date(t).toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const cls = /hibernating|disabled/.test(msg) ? ' class="hi"' : "";
+      return `<span class="t">${shown}</span>  <span${cls}>${esc(msg)}</span>`;
+    }).join("\n");
+    $("logNote").textContent = d.path + " · newest last";
+    if (atBottom) el.scrollTop = el.scrollHeight;
+  } catch (e) {}
+}
+
+// Poll only while the tab is visible; tick relative times every second.
+let timers = [];
+function startPolling() {
+  stopPolling(); poll().then(pollLog);
+  timers = [setInterval(poll, 3000), setInterval(pollLog, 15000), setInterval(tickLive, 1000)];
+}
+function stopPolling() { timers.forEach(clearInterval); timers = []; }
+document.addEventListener("visibilitychange", () => document.hidden ? stopPolling() : startPolling());
+startPolling();
+setTimeout(() => { $("log").scrollTop = $("log").scrollHeight; }, 1500);
+</script>
+</body>
+</html>
