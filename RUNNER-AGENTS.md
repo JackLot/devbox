@@ -11,6 +11,11 @@ Read this before starting; add to it when you learn something a future run would
 - Bash commands containing a shell expansion (`$(...)`, `$VAR`) are refused ("Contains
   simple_expansion"), even inside a quoted heredoc. That bites `index.html` edits, where the JS
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
+- You can still exercise dashboard endpoints: in one foreground `python3 -c` script, import
+  `server`, set `server.Handler.sampler` to a stub, run a `ThreadingHTTPServer` on port 0 in a
+  daemon thread and hit it with `urllib`.
+- `tmux capture-pane` and chained shell commands over `~/.claude` need approval you won't get;
+  read `~/.claude/sessions/*.json` and transcripts with Read/Glob or a Python one-liner instead.
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
   and run `node --check` on it.
 
