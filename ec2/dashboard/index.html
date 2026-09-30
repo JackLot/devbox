@@ -65,6 +65,13 @@ header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; m
 header h1 { font-size: 20px; margin: 0; font-weight: 600; }
 header .meta { color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 16px; }
 header .meta b { font-weight: 500; color: var(--ink); }
+/* Narrow screens: buttons stay top-right beside the name, metadata wraps below. */
+@media (max-width: 760px) {
+  header { align-items: center; }
+  header h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; }
+  header .actions { order: 1; }
+  header .meta { order: 2; flex-basis: 100%; }
+}
 .stale { color: var(--critical); font-weight: 500; }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -149,6 +156,8 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .tbl tr.open a { color: inherit; text-decoration: none; }
 .tbl tr.open:hover a, .tbl tr.open a:focus-visible { text-decoration: underline; }
 .num { text-align: right !important; font-variant-numeric: tabular-nums; }
+/* Process tables on phones: drop PID, user, age and the unsorted metric so the command has room. */
+@media (max-width: 560px) { .tbl .wide { display: none; } }
 .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .bar { display: inline-block; height: 6px; border-radius: 0 3px 3px 0; background: var(--s1); vertical-align: middle; margin-right: 6px; }
 .scroll { overflow-x: auto; }
@@ -218,7 +227,8 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 @media (max-width: 560px) { .sess .top { flex-wrap: wrap; } .sess .sep { display: none; } .sess .where { flex-basis: 100%; order: 3; } }
 .counts span { white-space: nowrap; }
 .counts { color: var(--ink-2); font-weight: 400; margin-left: 8px; }
-.actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+.actions button { white-space: nowrap; }
 .hib-btn { background: var(--s1); color: #fff; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
 .hib-btn:hover { filter: brightness(1.1); }
 .hib-btn:disabled { opacity: .6; cursor: default; }
@@ -498,15 +508,18 @@ $("hibBtn").onclick = async () => {
 function procTable(rows, key) {
   if (!rows || !rows.length) return '<div class="note">Collecting samples…</div>';
   const max = Math.max(...rows.map(r => r[key] || 0)) || 1;
-  return `<table class="tbl"><colgroup><col style="width:64px"><col style="width:72px"><col style="width:${key === "cpu" ? 110 : 64}px"><col style="width:${key === "rss" ? 120 : 76}px"><col style="width:64px"><col><col style="width:52px"></colgroup>
-    <thead><tr><th class="num">PID</th><th>User</th><th class="num">CPU</th><th class="num">Memory</th><th class="num">Age</th><th>Command</th><th></th></tr></thead><tbody>` +
+  // Widths sit on the header cells, not a <colgroup>, so the "wide" columns
+  // can be hidden on narrow screens without shifting the others.
+  const wide = k => k === key ? "num" : "num wide";
+  return `<table class="tbl">
+    <thead><tr><th class="num wide" style="width:64px">PID</th><th class="wide" style="width:72px">User</th><th class="${wide("cpu")}" style="width:${key === "cpu" ? 110 : 64}px">CPU</th><th class="${wide("rss")}" style="width:${key === "rss" ? 120 : 76}px">Memory</th><th class="num wide" style="width:64px">Age</th><th>Command</th><th style="width:52px"></th></tr></thead><tbody>` +
     rows.map(r => {
       const bar = w => `<span class="bar" style="width:${Math.max(1, w / max * 40)}px"></span>`;
       const cpu = r.cpu == null ? "–" : r.cpu.toFixed(1) + "%";
-      return `<tr><td class="num">${r.pid}</td><td>${esc(r.user)}</td>
-        <td class="num">${key === "cpu" ? bar(r.cpu) : ""}${cpu}</td>
-        <td class="num">${key === "rss" ? bar(r.rss) : ""}${bytes(r.rss, 0)}</td>
-        <td class="num">${dur(r.age)}</td><td class="cmd" title="${esc(r.cmd)}">${esc(r.cmd)}</td>
+      return `<tr><td class="num wide">${r.pid}</td><td class="wide">${esc(r.user)}</td>
+        <td class="${wide("cpu")}">${key === "cpu" ? bar(r.cpu) : ""}${cpu}</td>
+        <td class="${wide("rss")}">${key === "rss" ? bar(r.rss) : ""}${bytes(r.rss, 0)}</td>
+        <td class="num wide">${dur(r.age)}</td><td class="cmd" title="${esc(r.cmd)}">${esc(r.cmd)}</td>
         <td class="num">${stopButton(r.pid, r.start, r.user, r.cmd)}</td></tr>`;
     }).join("") + "</tbody></table>";
 }
