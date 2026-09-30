@@ -697,12 +697,15 @@ def cron_next(expr, now):
 
 
 def runner_conf():
-    """Cron entry and repo slugs; they rarely change, so read once a minute."""
+    """Cron entry and repo slugs; they rarely change, so read once a minute. The
+    entry comes from the copy agent-runner/install.sh leaves in RUNNER_HOME, not
+    `crontab -l`: the service's NoNewPrivileges stops the setuid crontab binary
+    from reading the spool, and it fails the PAM check."""
     if time.time() - _runner_conf["time"] < RUNNER_CONF_TTL:
         return _runner_conf
     schedule = command = path = None
-    crontab = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=2).stdout
-    for line in crontab.splitlines():
+    crontab = safe(read, os.path.join(RUNNER_HOME, "crontab"))
+    for line in (crontab or "").splitlines():
         line = line.strip()
         if line.startswith("PATH="):
             path = line[5:]  # the one in effect for the entry below it
@@ -724,7 +727,8 @@ def runner_conf():
         m = url and re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
         if m:
             repos[os.path.basename(d.rstrip("/"))] = m.group(1)
-    _runner_conf.update(time=time.time(), schedule=schedule, command=command, path=path, repos=repos)
+    _runner_conf.update(time=time.time(), crontab=crontab is not None, schedule=schedule,
+                        command=command, path=path, repos=repos)
     return _runner_conf
 
 
@@ -935,6 +939,7 @@ def agent_runner(sessions, github):
         "running": holder is not None,
         "holder": holder,
         "current": current,
+        "crontab": conf["crontab"],
         "schedule": conf["schedule"],
         "next_run": safe(cron_next, conf["schedule"], now) if conf["schedule"] else None,
         "last_log_line": last_tick,
@@ -949,6 +954,8 @@ def agent_runner(sessions, github):
 
 def can_start_runner(conf):
     """True, or why the dashboard can't start a run itself."""
+    if not conf["crontab"]:
+        return "%s/crontab is missing; re-run agent-runner/install.sh" % RUNNER_HOME
     if not conf["command"]:
         return "no agent-runner entry in the crontab"
     if not os.access(RUNNER_HOME, os.W_OK):

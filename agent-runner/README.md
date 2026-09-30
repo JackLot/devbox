@@ -80,6 +80,7 @@ this public repo because it names private repos and the logs can contain secrets
 ~/.agent-runner/
   repos        # checkouts to watch + untracked files to link (from repos.example)
   cron.log     # one line per run
+  crontab      # copy of the installed cron entry, read by the dashboard
   logs/        # full JSON output of each issue run
   worktrees/   # <repo>-N checkouts of agent/issue-N, kept until the issue is closed
   lock

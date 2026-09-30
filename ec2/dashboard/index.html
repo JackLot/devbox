@@ -1136,7 +1136,7 @@ function tickLive() {
   const r = last && last.runner;
   if (r) {
     $("runnerNext").textContent = r.next_run ? `next run in ${durSec(r.next_run - now)} · ${r.schedule}`
-      : r.schedule ? r.schedule : "no cron entry";
+      : r.schedule ? r.schedule : r.crontab ? "no cron entry" : "cron entry unknown: re-run agent-runner/install.sh";
     const run = r.current ? durSec(now - r.current.started) : "";
     document.querySelectorAll(".liveRun").forEach(el => el.textContent = run);
     if ($("runnerElapsed")) $("runnerElapsed").textContent = run;

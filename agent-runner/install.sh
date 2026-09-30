@@ -48,13 +48,19 @@ if ! command -v crontab >/dev/null; then
   log "crontab not found; install cron first (AL2023: sudo dnf install -y cronie && sudo systemctl enable --now crond), then re-run"
   exit 1
 fi
-{
-  { crontab -l 2>/dev/null || true; } | sed "/^$MARK_BEGIN\$/,/^$MARK_END\$/d"
+block=$(
   echo "$MARK_BEGIN"
   sed -e "s|@HOME@|$HOME|g" -e "s|@DIR@|$DIR|g" "$DIR/crontab" | grep -v '^#'
   echo "$MARK_END"
+)
+{
+  { crontab -l 2>/dev/null || true; } | sed "/^$MARK_BEGIN\$/,/^$MARK_END\$/d"
+  echo "$block"
 } | crontab -
-log "installed cron entry (crontab -l)"
+# Copy for the dashboard: its service runs with NoNewPrivileges, which stops the
+# setuid crontab binary from reading the spool, so `crontab -l` fails there
+echo "$block" > "$HOME_DIR/crontab"
+log "installed cron entry (crontab -l; copy in $HOME_DIR/crontab)"
 
 # Checks that the required CLI tools are available on the PATH
 for tool in gh claude jq flock; do
