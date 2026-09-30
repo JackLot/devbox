@@ -33,7 +33,9 @@ Read this before starting; add to it when you learn something a future run would
   ends in your worktree's file path; the newest entry's file in that folder is their last
   save. Diff it against HEAD and apply it (a `python3 -c` copy; `cp` from outside the
   worktree is refused). `git fsck` works from a `python3 -c` subprocess too, but won't have
-  unstaged edits.
+  unstaged edits. Check this even when the newest comment asks for nothing new: a re-run with
+  no new requests can mean they saved tweaks after your last push (compare entry timestamps
+  with the last commit time).
 ## Letting the reviewer check your change
 
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the
