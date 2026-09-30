@@ -125,6 +125,10 @@ dialog.modal {
   box-shadow: 0 12px 40px rgba(0,0,0,.25);
 }
 dialog.modal::backdrop { background: rgba(0,0,0,.4); }
+/* While a modal is open, touch scrolling stays in it (and its logs) instead of moving the page behind */
+html:has(dialog.modal[open]) { overflow: hidden; }
+dialog.modal, dialog.modal .log { overscroll-behavior: contain; }
+@supports (height: 100dvh) { dialog.modal { max-height: calc(100dvh - 32px); } dialog.modal .slog { height: min(70dvh, 700px); } }
 .modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .modal-head h2 { font-size: 16px; margin: 0; color: var(--ink); }
 .modal-head .theme { margin-left: auto; }
@@ -309,6 +313,7 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
 .issues .lastrun { cursor: pointer; border-radius: 4px; }
 /* run modal */
 .run-body { display: grid; gap: 14px; overflow-wrap: anywhere; }
+.run-body > * { min-width: 0; }
 .run-body h3 { margin: 0 0 4px; }
 .run-body .facts { margin-top: 0; padding-top: 0; border-top: 0; }
 .run-body .md { white-space: pre-wrap; font-size: 13px; line-height: 1.55; padding: 10px 12px; border-radius: 8px; background: var(--page); border: 1px solid var(--border); }
@@ -330,10 +335,12 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
 @media (max-width: 760px) {
   .issues { display: none; }
   .issue-list { display: block; }
-  /* runner card head: "next run in ..." on its own line under the title, no copyable command */
-  .runner .card-head { flex-wrap: wrap; row-gap: 2px; }
-  .runner-next { flex-basis: 100%; margin-left: 0; }
+  /* runner card head: just the "next run in ..." countdown, no schedule or copyable command */
+  .runner-next .sched { display: none; }
   #runnerStart:not([hidden]) { display: none; }
+  /* issue modal: branch on its own line under the worktree path, so the modal fits the screen */
+  .issue-modal .copy { flex-wrap: wrap; white-space: normal; }
+  .issue-modal .copy .br { order: 1; flex-basis: 100%; margin-left: 0; margin-top: 2px; }
 }
 /* issue modal */
 dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
@@ -952,9 +959,9 @@ function renderIssues(r, now) {
     }).join("") + "</tbody></table>" +
     // Phones get a one-line-per-issue list instead of the table; a row opens the issue modal.
     `<div class="issue-list"><h3>Issues (${open} open)</h3>${rows.map(x => {
-      const [dot, label] = x.last_run ? RUN_STATUS[x.last_run.status] || ["idle", x.last_run.status] : ["idle", "No runs"];
+      const [dot, label] = ISSUE_STATE[x.state] || ["idle", "No agent label"];
       return `<div class="irow" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog">
-        <span class="dot ${dot}" role="img" title="Last run: ${esc(label)}" aria-label="Last run: ${esc(label)}"></span>
+        <span class="dot ${dot}" role="img" title="State: ${esc(label)}" aria-label="State: ${esc(label)}"></span>
         <span class="t"><span class="ref">${esc(issueKey(x))}</span> ${esc(x.title || "")}</span></div>`;
     }).join("")}</div>`
     : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading issues from GitHub…"}</div>`;
@@ -1231,8 +1238,9 @@ function tickLive() {
   const idle = last && last.idle, now = Date.now() / 1000;
   const r = last && last.runner;
   if (r) {
-    $("runnerNext").textContent = r.next_run ? `next run in ${durSec(r.next_run - now)} · ${r.schedule}`
-      : r.schedule ? r.schedule : r.crontab ? "no cron entry" : "cron entry unknown: re-run agent-runner/install.sh";
+    // The schedule is its own span so phones can hide it and show just the countdown
+    $("runnerNext").innerHTML = r.next_run ? `next run in ${durSec(r.next_run - now)}<span class="sched"> · ${esc(r.schedule)}</span>`
+      : esc(r.schedule ? r.schedule : r.crontab ? "no cron entry" : "cron entry unknown: re-run agent-runner/install.sh");
     const run = r.current ? durSec(now - r.current.started) : "";
     document.querySelectorAll(".liveRun").forEach(el => el.textContent = run);
     if ($("runnerElapsed")) $("runnerElapsed").textContent = run;
