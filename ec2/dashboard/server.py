@@ -235,7 +235,8 @@ def listening(procs):
         pid = owner.get(s["inode"])
         p = procs.get(pid) if pid else None
         out.append({"addr": s["addr"], "port": s["port"], "pid": pid,
-                    "user": p["user"] if p else None, "cmd": p["cmd"] if p else None})
+                    "user": p["user"] if p else None, "cmd": p["cmd"] if p else None,
+                    "start": start_ticks(p) if p else None})
     return out
 
 
@@ -570,6 +571,7 @@ class Sampler:
 
     def __init__(self):
         self.lock = threading.Lock()
+        self.sampling = threading.Lock()  # sample() runs from the loop and after a stop
         self.history = collections.deque(maxlen=HISTORY)
         self.snapshot = {}
         self.instance = None
@@ -592,6 +594,14 @@ class Sampler:
                     self.snapshot["error"] = repr(e)
 
     def sample(self):
+        with self.sampling:
+            self._sample()
+
+    def resample_soon(self):
+        """Refresh right after a stop so the page drops the row on its next poll."""
+        threading.Timer(0.5, lambda: safe(self.sample)).start()
+
+    def _sample(self):
         now = time.time()
         cpu = cpu_times()
         net = safe(net_bytes) or {}
@@ -809,7 +819,10 @@ class Handler(BaseHTTPRequestHandler):
             pid, start = int(body["pid"]), int(body["start"])
         except (KeyError, TypeError, ValueError):
             return self.reply(400, "expected JSON {pid, start}")
-        self.reply(*stop_process(pid, start))
+        code, message = stop_process(pid, start)
+        if code == 200:
+            self.sampler.resample_soon()
+        self.reply(code, message)
 
     def refuse_foreign(self):
         """Reason to refuse a request that didn't come from this dashboard's

@@ -664,10 +664,11 @@ function render(d) {
   $("topCpu").innerHTML = procTable(d.processes.top_cpu, "cpu");
   $("topMem").innerHTML = procTable(d.processes.top_mem, "rss");
 
-  $("ports").innerHTML = (d.ports && d.ports.length) ? `<table class="tbl"><colgroup><col style="width:160px"><col style="width:70px"><col style="width:70px"><col style="width:72px"><col></colgroup>
-    <thead><tr><th>Address</th><th class="num">Port</th><th class="num">PID</th><th>User</th><th>Command</th></tr></thead><tbody>` +
+  $("ports").innerHTML = (d.ports && d.ports.length) ? `<table class="tbl"><colgroup><col style="width:160px"><col style="width:70px"><col style="width:70px"><col style="width:72px"><col><col style="width:52px"></colgroup>
+    <thead><tr><th>Address</th><th class="num">Port</th><th class="num">PID</th><th>User</th><th>Command</th><th></th></tr></thead><tbody>` +
     d.ports.map(p => `<tr><td>${esc(p.addr)}</td><td class="num">${p.port}</td><td class="num">${p.pid || "–"}</td><td>${esc(p.user || "–")}</td>
-      <td class="cmd" title="${esc(p.cmd || "")}">${p.cmd ? esc(p.cmd) : '<span style="color:var(--muted)">owned by another user</span>'}</td></tr>`).join("") +
+      <td class="cmd" title="${esc(p.cmd || "")}">${p.cmd ? esc(p.cmd) : '<span style="color:var(--muted)">owned by another user</span>'}</td>
+      <td class="num">${p.pid ? stopButton(p.pid, p.start, p.user, `${p.cmd} (port ${p.port})`) : ""}</td></tr>`).join("") +
     "</tbody></table>" : '<div class="note">None</div>';
 }
 
