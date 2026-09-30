@@ -150,7 +150,7 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 .scroll { overflow-x: auto; }
 .section { margin-top: 12px; }
 /* claude sessions */
-.sessions { margin-top: 12px; }
+.sessions { margin-top: 24px; margin-bottom: 12px; }
 .sess { padding: 14px 0; border-top: 1px solid var(--grid); display: grid; gap: 6px; min-width: 0; }
 .sess:first-of-type { border-top: 0; padding-top: 6px; }
 .sess:last-of-type { padding-bottom: 2px; }
@@ -251,7 +251,7 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 }
 .copy .br { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; color: var(--muted); }
 .copy .br svg { flex: none; }
-.divider { border: 0; border-top: 1px solid var(--axis); margin: 24px 0 12px; }
+.divider { border: 0; border-top: 1px solid var(--axis); margin: 50px 0 50px; }
 .copy:hover, .copy:focus-visible { color: var(--ink); text-decoration: underline; outline: none; }
 .copy.done { color: var(--good-ink); text-decoration: none; }
 .copy-btn { font-size: 11px; padding: 0 6px; margin-left: 8px; line-height: 18px; vertical-align: 1px; }
@@ -263,7 +263,10 @@ details.fold[open] > summary svg { transform: rotate(90deg); }
 details.fold > summary:hover h3 { color: var(--ink-2); }
 .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
 .tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.runner .go { font-size: 11px; padding: 1px 8px; }
+.runner .go { font-size: 12px; padding: 2px 10px; white-space: nowrap; }
+/* Copy icon fades in on hover so it's clear a click copies; opacity keeps the width fixed */
+.copy .cp { display: inline-flex; margin-left: 6px; color: var(--muted); opacity: 0; transition: opacity .1s; }
+.copy:hover .cp, .copy:focus-visible .cp { opacity: 1; }
 .runs tbody tr { cursor: pointer; }
 .runs tbody tr:hover, .runs tbody tr:focus-visible, .issues .lastrun:hover { background: var(--page); outline: none; }
 .issues .lastrun { cursor: pointer; border-radius: 4px; }
@@ -325,6 +328,7 @@ details.fold > summary:hover h3 { color: var(--ink-2); }
     <div class="card-head">
       <h2>Agent runner</h2>
       <span class="runner-next" id="runnerNext"></span>
+      <span id="runnerStart" hidden></span>
     </div>
     <div class="runner-now" id="runnerNow"></div>
     <div class="scroll section" id="runnerIssues"></div>
@@ -688,6 +692,7 @@ const issueLink = x => {
 };
 
 const BRANCH_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" aria-label="branch" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="3" cy="2.5" r="1.5"/><circle cx="3" cy="9.5" r="1.5"/><circle cx="9" cy="3.5" r="1.5"/><path d="M3 4v4M9 5c0 2.5-6 1.5-6 3"/></svg>';
+const COPY_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><path d="M8.5 2.2V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v5.5a1 1 0 0 0 1 1h.2"/></svg>';
 const logName = p => p ? p.split("/").pop() : "";
 
 // Where an issue is in the runner's label lifecycle (see agent-runner/README.md)
@@ -713,36 +718,42 @@ const issuePr = x => {
   return i && i.pr;
 };
 
-function issueState(x, startBtn) {
+function issueState(x) {
   // "PR#17 to review" in place of the chip's label when the PR is the state
   if (x.state === "pr" && x.pr) {
     return `<span class="chip"><span class="dot good" aria-hidden="true"></span><span>${prLink(x.pr)} to review</span></span>`;
   }
-  return issueChip(x.state) + (x.pr ? " " + prLink(x.pr) : "") + (x.state === "queued" ? startBtn() : "");
+  return issueChip(x.state) + (x.pr ? " " + prLink(x.pr) : "");
+}
+
+// A run picks up every queued issue, so "Run now" sits in the card head beside the
+// cron countdown rather than on a row, and only while something is queued.
+function renderStart(r) {
+  const queued = r.issues.filter(x => x.state === "queued").map(x => x.repo + "#" + x.issue);
+  $("runnerStart").hidden = !queued.length;
+  if (!queued.length) { $("runnerStart").innerHTML = ""; return; }
+  const why = r.running ? "A run is in progress; queued issues wait for the next tick"
+    : r.can_start !== true ? "Can't start runs from here: " + r.can_start : "";
+  $("runnerStart").innerHTML = `<button type="button" class="hib-btn go" data-queued="${esc(queued.join(", "))}"${why ? ` disabled title="${esc(why)}"`
+    : ` title="${esc("Start agent-runner now instead of waiting for the next cron tick\nQueued: " + queued.join(", "))}"`}>Run now · ${queued.length} queued</button>`;
 }
 
 function renderIssues(r, now) {
   const gh = r.github, rows = r.issues;
   $("runnerIssuesNote").hidden = !(gh && gh.error);
   $("runnerIssuesNote").textContent = gh && gh.error ? "Couldn't refresh from GitHub: " + gh.error : "";
-  const queued = rows.filter(x => x.state === "queued").map(x => "#" + x.issue);
-  const startBtn = () => {
-    const why = r.running ? "A run is in progress; queued issues wait for the next tick"
-      : r.can_start !== true ? "Can't start runs from here: " + r.can_start : "";
-    return `<button type="button" class="hib-btn go" data-queued="${esc(queued.join(", "))}"${why ? ` disabled title="${esc(why)}"` : ' title="Start agent-runner now instead of waiting for the next cron tick"'}>Run now</button>`;
-  };
   const open = rows.filter(x => x.state !== "closed").length;
   // Other columns shrink to their contents (width:1% + nowrap); the issue column takes the rest.
   $("runnerIssues").innerHTML = rows.length ? `<table class="tbl issues">
-    <thead><tr><th class="main">Issues (${open} open)</th><th>Tags</th><th>Worktrees (${esc(home(r.home))}/worktrees/)</th><th>State</th><th>Last run</th></tr></thead><tbody>` +
+    <thead><tr><th class="main">Issues (${open} open)</th><th>Tags</th><th>${esc(home(r.home))}/worktrees/</th><th>State</th><th>Last run</th></tr></thead><tbody>` +
     rows.map(x => {
       const wt = x.worktree, run = x.last_run;
       const wtTitle = wt && `Click to copy: cd ${wt.path}\nBranch ${wt.branch}${wt.activity ? " · last git activity " + dur(now - wt.activity) + " ago" : ""}`;
       return `<tr>
       <td class="main" title="${esc(x.title || "")}">${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl">${esc(x.title || "")}</span></td>
       <td>${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'}</td>
-      <td>${wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc(wtTitle)}">${esc(wt.path.split("/").pop())}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}</button>` : '<span class="dim">–</span>'}</td>
-      <td><div class="state">${issueState(x, startBtn)}</div></td>
+      <td>${wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc(wtTitle)}">${esc(wt.path.split("/").pop())}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button>` : '<span class="dim">–</span>'}</td>
+      <td><div class="state">${issueState(x)}</div></td>
       <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td></tr>`;
     }).join("") + "</tbody></table>"
     : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading issues from GitHub…"}</div>`;
@@ -773,7 +784,7 @@ document.addEventListener("click", async e => {
 });
 
 document.addEventListener("click", async e => {
-  const b = e.target.closest("#runnerIssues button.go");
+  const b = e.target.closest("#runnerStart button.go");
   if (!b) return;
   if (!confirm(`Start agent-runner now?\n\nIt picks up every queued issue (${b.dataset.queued}), the same as the next cron tick would. Output goes to cron.log.`)) return;
   b.disabled = true; b.textContent = "Starting…";
@@ -880,6 +891,7 @@ function renderRunner(d) {
   }
 
   renderIssues(r, now);
+  renderStart(r);
 
   $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl runs"><colgroup><col style="width:120px"><col style="width:30%"><col style="width:112px"><col style="width:64px"><col style="width:64px"><col></colgroup>
     <thead><tr><th>Started</th><th>Issue</th><th>Outcome</th><th class="num">Took</th><th class="num">Cost</th><th>Summary</th></tr></thead><tbody>` +
