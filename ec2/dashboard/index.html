@@ -197,6 +197,9 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
   .agents .d { grid-row: 2; grid-column: 2 / 4; }
   .card-head { align-items: flex-start; }
   .counts { display: block; margin: 2px 0 0; }
+  /* No room for the idle count on phones; drop the dot before it if it was last. */
+  .counts .idle { display: none; }
+  .counts span:has(+ .idle:last-child)::after { content: none; }
 }
 .stop {
   font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink-2); background: none;
@@ -217,6 +220,7 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
 @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
 @media (max-width: 560px) { .sess .top { flex-wrap: wrap; } .sess .sep { display: none; } .sess .where { flex-basis: 100%; order: 3; } }
 .counts span { white-space: nowrap; }
+.counts span:not(:last-child)::after { content: " ·"; }
 .counts { color: var(--ink-2); font-weight: 400; margin-left: 8px; }
 .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .hib-btn { background: var(--s1); color: #fff; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
@@ -581,8 +585,7 @@ function renderClaude(d) {
   const now = Date.now() / 1000;
   const n = st => list.filter(s => s.status === st || (st === "idle" && s.status === "shell")).length;
   $("claudeCounts").innerHTML = [["busy", "working"], ["waiting", "need input"], ["idle", "idle"], ["stopped", "stopped"]]
-    .map(([st, word]) => n(st) && `${n(st)} ${word}`).filter(Boolean)
-    .map((t, i, all) => `<span>${t}${i < all.length - 1 ? " ·" : ""}</span>`).join(" ");
+    .map(([st, word]) => n(st) ? `<span class="${st}">${n(st)} ${word}</span>` : "").filter(Boolean).join(" ");
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === claudeView)));
   if (claudeView === "compact") { $("claude").innerHTML = renderCompact(list, now); return; }
   $("claude").innerHTML = list.map(s => {
