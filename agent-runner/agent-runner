@@ -78,7 +78,7 @@ ensure_labels() {
   gh label create "$LABEL_WIP"         -R "$repo" --color FBCA04 --description "Agent is working on this" 2>/dev/null || true
   gh label create "$LABEL_PR"          -R "$repo" --color 0E8A16 --description "Agent opened a PR" 2>/dev/null || true
   gh label create "$LABEL_NEEDS_HUMAN" -R "$repo" --color 5319E7 --description "Agent is blocked on a question; answer, then re-add '$LABEL_TRIGGER'" 2>/dev/null || true
-  gh label create "$LABEL_FAILED"      -R "$repo" --color D93F0B --description "Agent run failed" 2>/dev/null || true
+  gh label create "$LABEL_FAILED"      -R "$repo" --color B60205 --description "Agent run failed" 2>/dev/null || true
 }
 
 process_issue() {
