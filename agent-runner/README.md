@@ -19,12 +19,23 @@ plus `gh` and `claude`, both logged in.
 |---|---|---|
 | `agent` | Queue this issue (create it yourself; the rest are created on the first run) | Add it |
 | `agent-wip` | A run is working on it | Wait |
-| `agent-pr` | PR opened or updated | Review; for changes, comment on the issue and re-add `agent` |
+| `agent-pr` | PR opened or updated, or a follow-up question answered in a comment | Review; for changes or questions, comment on the issue and re-add `agent` |
 | `agent-needs-human` | Blocked; the agent's question is in an issue comment | Answer in a comment, re-add `agent` |
 | `agent-failed` | Run errored or made no commits; see the issue comment | Fix the issue text or the runner, re-add `agent` |
 
 Re-adding `agent` to an issue whose `agent/issue-N` branch already exists resumes on that branch
-with the full comment thread, and pushes to the open PR instead of opening a new one.
+with the full comment thread, and pushes to the open PR instead of opening a new one. If the
+follow-up only needs an answer (say, "how do I run this?"), the agent replies in an issue comment
+without committing and the issue goes back to `agent-pr`.
+
+## RUNNER-AGENTS.md
+
+Each watched repo can have a committed `RUNNER-AGENTS.md` at its root: what runner agents have
+learned about working in that repo unattended (tool limits, commands that don't work, how you
+want to verify changes). Agents read it before starting, and when a run teaches them something
+a future run would otherwise rediscover, often from your feedback in issue comments, they add
+it and commit it with their change, so it gets reviewed in the PR. See
+[`../RUNNER-AGENTS.md`](../RUNNER-AGENTS.md) for this repo's.
 
 ## When the agent stops to ask
 
@@ -44,9 +55,9 @@ edit the "Making decisions" section of the prompt in `agent-runner`.
 
 1. For each checkout in `~/.agent-runner/repos`, list open issues labeled `agent`.
 2. Swap the label to `agent-wip` so the next run doesn't pick it up again.
-3. `git worktree add` the `agent/issue-N` branch, from `origin/agent/issue-N` if it exists,
-   otherwise from `origin/<default branch>`, so the main checkout (and any interactive
-   session in it) is untouched.
+3. Reuse or create the issue's worktree, `~/.agent-runner/worktrees/<repo>-N`, on the
+   `agent/issue-N` branch at `origin/agent/issue-N` if it exists, otherwise at
+   `origin/<default branch>`. The main checkout (and any interactive session in it) is untouched.
 4. Symlink the untracked files listed for that repo (`.env`, tokens, ...) from the main
    checkout into the worktree.
 5. `claude -p` with the issue title, body and comments. It can edit files, run project
@@ -55,6 +66,10 @@ edit the "Making decisions" section of the prompt in `agent-runner`.
    decisions), and sets the final label with a comment.
 
 A lock file means runs never overlap.
+
+Worktrees are kept until their issue is closed (merging a PR with `Closes #N` does that), so
+dependencies installed in them survive between runs, and you can run the branch from the
+worktree while reviewing. Each run removes the worktrees and local branches of closed issues.
 
 ## Runtime directory
 
@@ -66,7 +81,7 @@ this public repo because it names private repos and the logs can contain secrets
   repos        # checkouts to watch + untracked files to link (from repos.example)
   cron.log     # one line per run
   logs/        # full JSON output of each issue run
-  worktrees/   # agent/issue-N checkouts while a run is active
+  worktrees/   # <repo>-N checkouts of agent/issue-N, kept until the issue is closed
   lock
 ```
 

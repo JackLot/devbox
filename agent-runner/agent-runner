@@ -10,7 +10,10 @@
 #
 # To continue after agent-needs-human, answer in an issue comment and re-add "agent".
 # Re-adding "agent" to an issue whose branch already exists resumes on that branch
-# (and updates its open PR), so it also works for follow-up changes.
+# (and updates its open PR), so it also works for follow-up changes or questions.
+#
+# Each issue's worktree (~/.agent-runner/worktrees/<repo>-<N>) is kept until the issue
+# is closed. Agents read and extend RUNNER-AGENTS.md in each repo with what they learn.
 
 set -euo pipefail
 
@@ -124,16 +127,19 @@ process_issue() {
   finish() { # <label> <comment>
     gh issue edit "$number" -R "$repo" --remove-label "$LABEL_WIP" --add-label "$1" >/dev/null
     gh issue comment "$number" -R "$repo" --body "$2" >/dev/null
-    git -C "$dir" worktree remove --force "$wt" 2>/dev/null || true
-    git -C "$dir" branch -D "$branch" >/dev/null 2>&1 || true
   }
 
-  # Remove the an already existing worktree if it exists
-  git -C "$dir" worktree remove --force "$wt" 2>/dev/null || true
-  
-  # Create a new worktree
-  # If the worktree creation fails, finish the issue by adding the '$LABEL_FAILED' label
-  if ! git -C "$dir" worktree add --quiet -B "$branch" "$wt" "$start"; then
+  # The worktree lives until the issue is closed (see cleanup_worktrees), so installed
+  # dependencies survive between runs and the reviewer can run the branch from it.
+  # Reuse it if it exists, reset to the pushed branch; otherwise create it.
+  # If that fails, finish the issue by adding the '$LABEL_FAILED' label
+  git -C "$dir" worktree prune
+  if [[ -d "$wt" ]]; then
+    if ! git -C "$wt" reset --quiet --hard "$start"; then
+      finish "$LABEL_FAILED" "🤖 Couldn't reset the worktree \`$wt\` to \`$start\` on the runner."
+      return 1
+    fi
+  elif ! git -C "$dir" worktree add --quiet -B "$branch" "$wt" "$start"; then
     finish "$LABEL_FAILED" "🤖 Couldn't create a worktree for \`$branch\` on the runner."
     return 1
   fi
@@ -154,7 +160,9 @@ process_issue() {
   local resume_note=""
   $resumed && resume_note="
 This branch already has earlier work on this issue (see git log). Continue from it; newer
-issue comments may answer questions from a previous run or ask for changes."
+issue comments may answer questions from a previous run or ask for changes. If the newest
+comments ask a question or ask for something other than code changes, answer them in
+\"summary\" (it is posted as your reply); no commit is needed in that case."
 
   # Define the prompt passed to the implementing agent (a heredoc, so quotes need no escaping)
   local prompt
@@ -165,8 +173,13 @@ Nobody is watching this session, so you can't ask questions mid-run.
 $issue
 $resume_note
 
+Your working directory, $wt, is a git worktree that stays in place until the
+issue is closed, so commands you give the reviewer (e.g. to run the branch) can point at it.
+
 Instructions:
-- Read CLAUDE.md (if present) and the relevant code before changing anything.
+- Read RUNNER-AGENTS.md and CLAUDE.md (if present) and the relevant code before changing
+  anything. RUNNER-AGENTS.md holds what earlier runner agents learned about working in this
+  repo unattended; follow it.
 - Implement the change the issue asks for. Keep the change focused on the issue.
 - If dependencies aren't installed (e.g. no node_modules), install them first.
 - Run the relevant tests/build and fix failures you introduced.
@@ -174,6 +187,12 @@ Instructions:
 - Never add Co-Authored-By trailers, "Generated with Claude Code" notes, or any other AI/Claude
   attribution to commits, code, docs or your summary.
 - Do not commit secrets or files like .env (they are symlinks to the main checkout).
+- If this run taught you something about working in this repo as an unattended runner agent
+  that a future run would otherwise have to rediscover (reviewer feedback in the comments,
+  a tool or permission limit, a command that doesn't work here, how the reviewer wants to
+  verify changes), add it to RUNNER-AGENTS.md at the repo root (create it if missing) and
+  commit it. Keep entries short and specific; update an existing entry instead of adding a
+  near-duplicate. Only runner-specific learnings belong there, not general docs.
 
 Making decisions:
 - Bias strongly toward deciding and finishing. When the issue is ambiguous or leaves details
@@ -196,6 +215,7 @@ EOF
   # Run the agent with the 'claude' CLI tool
   local rc=0
   (cd "$wt" && claude -p "$prompt" \
+      --name "Issue #$number - $title" \
       --allowedTools "${ALLOWED_TOOLS[@]}" \
       --permission-mode acceptEdits \
       --max-turns "$MAX_TURNS" \
@@ -219,6 +239,9 @@ $decisions"
   [[ -n $(git -C "$wt" log --oneline "$start..HEAD" 2>/dev/null) ]] && has_commits=true
   $has_commits && git -C "$wt" push --quiet origin "HEAD:refs/heads/$branch"
 
+  local pr_url
+  pr_url=$(gh pr list -R "$repo" --head "$branch" --state open --json url --jq '.[0].url // empty')
+
   # If the agent run failed, finish the issue by adding the '$LABEL_FAILED' label
   if (( rc != 0 )) || [[ -z "$status" ]]; then
     log "Failed $repo#$number (exit $rc)"
@@ -233,14 +256,16 @@ ${question:-$summary}
 $($has_commits && echo "
 Progress so far is on \`$branch\`.")
 Reply in a comment, then re-add the \`$LABEL_TRIGGER\` label to continue."
+  elif ! $has_commits && [[ -n "$pr_url" ]]; then
+    # A follow-up that needed an answer rather than code; the PR is still up for review
+    log "Replied: $repo#$number"
+    finish "$LABEL_PR" "🤖 $summary"
   elif ! $has_commits; then
     log "No commits: $repo#$number"
     finish "$LABEL_FAILED" "🤖 The agent finished without committing anything.
 
 $summary"
   else
-    local pr_url
-    pr_url=$(gh pr list -R "$repo" --head "$branch" --state open --json url --jq '.[0].url // empty')
     if [[ -n "$pr_url" ]]; then
       gh pr comment "$pr_url" --body "🤖 Pushed an update for #$number.
 
@@ -258,6 +283,21 @@ $decisions")
   fi
 }
 
+# Remove the worktrees (and local branches) of issues that have been closed,
+# e.g. by merging their PR
+cleanup_worktrees() {
+  local dir=$1 repo=$2 name wt number
+  name=$(basename "$dir")
+  for wt in "$WORKTREE_ROOT/$name"-*; do
+    number=${wt##*-}
+    [[ -d "$wt" && "$number" =~ ^[0-9]+$ ]] || continue
+    [[ $(gh issue view "$number" -R "$repo" --json state --jq .state 2>/dev/null) == CLOSED ]] || continue
+    log "Removing worktree for closed $repo#$number"
+    git -C "$dir" worktree remove --force "$wt" || true
+    git -C "$dir" branch -D "agent/issue-$number" >/dev/null 2>&1 || true
+  done
+}
+
 [[ -f "$CONFIG" ]] || { echo "No config at $CONFIG (see repos.example)" >&2; exit 1; }
 
 
@@ -272,6 +312,7 @@ while read -r dir links <&3; do
   repo=$(gh repo view "$(git -C "$dir" remote get-url origin)" --json nameWithOwner --jq .nameWithOwner)
   base=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name)
   $DRY_RUN || ensure_labels "$repo"
+  $DRY_RUN || cleanup_worktrees "$dir" "$repo"
 
   # Gets only issues still carrying the trigger label, and applies a label requiring
   # triage/write access, so outsiders can't queue work.
