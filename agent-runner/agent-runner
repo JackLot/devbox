@@ -156,9 +156,10 @@ process_issue() {
 This branch already has earlier work on this issue (see git log). Continue from it; newer
 issue comments may answer questions from a previous run or ask for changes."
 
-  # Define the prompt passed to the implementing agent
+  # Define the prompt passed to the implementing agent (a heredoc, so quotes need no escaping)
   local prompt
-  prompt="You are running unattended to implement a GitHub issue in this repository.
+  prompt=$(cat <<EOF
+You are running unattended to implement a GitHub issue in this repository.
 Nobody is watching this session, so you can't ask questions mid-run.
 
 $issue
@@ -178,17 +179,19 @@ Making decisions:
 - Bias strongly toward deciding and finishing. When the issue is ambiguous or leaves details
   open (naming, copy, layout, which of several reasonable approaches, edge-case behavior),
   pick the option most consistent with the existing code and the issue's intent, implement
-  it, and record it in \"decisions\" so the reviewer can push back on the PR. A reviewer
+  it, and record it in "decisions" so the reviewer can push back on the PR. A reviewer
   changing a decision later is cheap; a stalled issue is not.
-- Return status \"needs_human\" only as a last resort, when you truly cannot proceed
+- Return status "needs_human" only as a last resort, when you truly cannot proceed
   responsibly: the goal itself is unclear enough that any implementation is likely wrong,
   it needs access/credentials/external setup you don't have, or it requires an
   irreversible or high-risk choice (data deletion, breaking public APIs, security or billing
   behavior) the issue doesn't settle.
 - If you return needs_human, commit any useful progress first, and put specific,
-  answerable questions in \"question\" (with your recommended answer where you have one).
+  answerable questions in "question" (with your recommended answer where you have one).
 
-Your final response must match the output schema: \"summary\" becomes the PR description."
+Your final response must match the output schema: "summary" becomes the PR description.
+EOF
+)
 
   # Run the agent with the 'claude' CLI tool
   local rc=0
