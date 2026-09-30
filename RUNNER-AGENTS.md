@@ -11,6 +11,7 @@ Read this before starting; add to it when you learn something a future run would
 - Bash commands containing a shell expansion (`$(...)`, `$VAR`) are refused ("Contains
   simple_expansion"), even inside a quoted heredoc. That bites `index.html` edits, where the JS
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
+  `sed -i` chained with `&&` is refused too ("requires approval"); edit docs with the Edit tool.
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
   and run `node --check` on it. To catch runtime errors too, `eval` that script in `node -e`
   with stubbed `document`/`localStorage`/`fetch`/`setInterval` and call `render()` on a
