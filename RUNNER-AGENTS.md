@@ -16,6 +16,8 @@ Read this before starting; add to it when you learn something a future run would
   daemon thread and hit it with `urllib`.
 - `tmux capture-pane` and chained shell commands over `~/.claude` need approval you won't get;
   read `~/.claude/sessions/*.json` and transcripts with Read/Glob or a Python one-liner instead.
+- `gh pr view` needs approval you won't get, so an earlier run's PR description is out of reach;
+  work from `git log`/`git show` on the branch and the issue comments in your prompt.
 - To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
   and run `node --check` on it.
 
