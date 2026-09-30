@@ -215,7 +215,7 @@ EOF
   # Run the agent with the 'claude' CLI tool
   local rc=0
   (cd "$wt" && claude -p "$prompt" \
-      --name "Issue #$number - $title" \
+      --name "$name#$number - $title" \
       --allowedTools "${ALLOWED_TOOLS[@]}" \
       --permission-mode acceptEdits \
       --max-turns "$MAX_TURNS" \

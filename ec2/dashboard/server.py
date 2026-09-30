@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""devbox dashboard: processes, resources and auto-hibernate state.
+"""devbox dashboard: processes, resources, auto-hibernate and agent-runner state.
 
 Stdlib only; reads /proc directly, so it runs on any Linux box with python3.
 Sections that don't apply (no idle checker, no IMDS) come back as null.
@@ -545,6 +545,405 @@ def claude_sessions(procs, rows):
     return out
 
 
+# ---- agent runner -------------------------------------------------------------
+# agent-runner (../../agent-runner) keeps its state in ~/.agent-runner: a lock
+# held while a run is in progress, cron.log, one JSON log per issue run
+# (<repo>-<N>-<YYYYmmdd-HHMMSS>.json, empty until the run ends) and a worktree
+# per open issue. The run's Claude session is also in the Claude sessions card;
+# here it's matched by cwd to show what the current run is doing.
+
+RUNNER_HOME = os.environ.get("AGENT_RUNNER_HOME") or os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".agent-runner")
+RUNNER_RUNS = 10
+RUNNER_LOG_LINES = 80
+RUNNER_CONF_TTL = 60
+RUN_RAW_MAX = 512 * 1024
+_runner_runs = {}  # log path -> (mtime, size, run)
+_runner_titles = {}  # session id -> title; it never changes
+_runner_conf = {"time": 0}
+
+
+def lock_holder(path):
+    """Pid holding a flock on path (as /proc/locks reports it), or None. Reads
+    /proc/locks instead of trying the lock, which could make a cron tick skip."""
+    st = os.stat(path)
+    key = "%02x:%02x:%d" % (os.major(st.st_dev), os.minor(st.st_dev), st.st_ino)
+    for line in read("/proc/locks").splitlines():
+        f = line.split()
+        if "->" not in f and len(f) > 5 and f[5] == key:  # "->" marks a blocked waiter
+            return int(f[4])
+    return None
+
+
+_CRON_MACROS = {"@hourly": "0 * * * *", "@daily": "0 0 * * *", "@midnight": "0 0 * * *",
+                "@weekly": "0 0 * * 0", "@monthly": "0 0 1 * *", "@yearly": "0 0 1 1 *",
+                "@annually": "0 0 1 1 *"}
+
+
+def cron_field(spec, lo, hi):
+    vals = set()
+    for part in spec.split(","):
+        rng, _, step = part.partition("/")
+        if rng == "*":
+            a, b = lo, hi
+        elif "-" in rng:
+            a, b = (int(x) for x in rng.split("-"))
+        else:
+            a = b = int(rng)
+            if step:
+                b = hi
+        vals.update(range(a, b + 1, int(step or 1)))
+    return vals
+
+
+def cron_next(expr, now):
+    """Next time (local, as cron uses) a numeric 5-field schedule fires, or None."""
+    f = _CRON_MACROS.get(expr, expr).split()
+    mins, hours, dom, mon, dow = (cron_field(f[i], lo, hi) for i, (lo, hi) in
+                                  enumerate(((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))))
+    if 7 in dow:
+        dow.add(0)
+    t = (int(now) // 60 + 1) * 60
+    for _ in range(8 * 24 * 60):
+        tm = time.localtime(t)
+        # When both day fields are restricted, cron fires on either
+        day_dom, day_dow = tm.tm_mday in dom, (tm.tm_wday + 1) % 7 in dow
+        if f[2] != "*" and f[4] != "*":
+            day = day_dom or day_dow
+        else:
+            day = day_dom and day_dow
+        if tm.tm_min in mins and tm.tm_hour in hours and tm.tm_mon in mon and day:
+            return t
+        t += 60
+    return None
+
+
+def runner_conf():
+    """Cron entry and repo slugs; they rarely change, so read once a minute."""
+    if time.time() - _runner_conf["time"] < RUNNER_CONF_TTL:
+        return _runner_conf
+    schedule = command = path = None
+    crontab = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=2).stdout
+    for line in crontab.splitlines():
+        line = line.strip()
+        if line.startswith("PATH="):
+            path = line[5:]  # the one in effect for the entry below it
+        elif "agent-runner" in line and not line.startswith("#"):
+            f = line.split()
+            n = 1 if f[0].startswith("@") else 5
+            schedule = " ".join(f[:n])
+            command = next((w for w in f[n:] if "agent-runner" in w), None)
+            break
+    # <checkout name> -> owner/repo, from each watched checkout's origin remote
+    repos = {}
+    for line in (safe(read, os.path.join(RUNNER_HOME, "repos")) or "").splitlines():
+        f = line.split()
+        if not f or f[0].startswith("#"):
+            continue
+        d = os.path.expanduser(f[0])
+        url = safe(lambda: re.search(r'\[remote "origin"\][^\[]*?url\s*=\s*(\S+)',
+                                     read(os.path.join(d, ".git", "config"))).group(1))
+        m = url and re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+        if m:
+            repos[os.path.basename(d.rstrip("/"))] = m.group(1)
+    _runner_conf.update(time=time.time(), schedule=schedule, command=command, path=path, repos=repos)
+    return _runner_conf
+
+
+# Issue labels, as set by agent-runner; the first one present gives the state.
+AGENT_LABELS = (("agent-wip", "wip"), ("agent", "queued"), ("agent-needs-human", "needs_human"),
+                ("agent-failed", "failed"), ("agent-pr", "pr"))
+GH_REFRESH = 60
+
+
+def gh_json(args, path):
+    env = dict(os.environ, PATH=path or os.environ.get("PATH", ""))
+    try:
+        r = subprocess.run(["gh"] + args, capture_output=True, text=True, timeout=20, env=env)
+    except FileNotFoundError:
+        raise RuntimeError("gh not found on PATH")
+    if r.returncode:
+        raise RuntimeError(((r.stderr or r.stdout).strip().splitlines() or ["gh exited %d" % r.returncode])[-1][:200])
+    return json.loads(r.stdout)
+
+
+def github_state(conf):
+    """Open issues and agent PRs of each watched repo. Slow (network), so the
+    sampler refreshes it once a minute in its own thread."""
+    out = {"time": time.time(), "error": None, "repos": {}}
+    for name, slug in conf["repos"].items():
+        try:
+            issues = gh_json(["issue", "list", "-R", slug, "--state", "open", "--limit", "200",
+                              "--json", "number,title,url,labels,updatedAt"], conf["path"])
+            prs = gh_json(["pr", "list", "-R", slug, "--state", "open", "--limit", "100",
+                           "--json", "number,url,isDraft,headRefName"], conf["path"])
+        except Exception as e:
+            out["error"] = "%s: %s" % (slug, e)
+            continue
+        out["repos"][name] = {"issues": issues,
+                              "prs": {p["headRefName"]: p for p in prs if p["headRefName"].startswith("agent/issue-")}}
+    return out
+
+
+def session_title(session_id):
+    """The --name the runner gave the session ("devbox#7 - title"), from the
+    first lines of its transcript."""
+    if session_id in _runner_titles:
+        return _runner_titles[session_id]
+    title = None
+    path = find_transcript(session_id)
+    if path:
+        with open(path, "rb") as f:
+            for n, raw in enumerate(f):
+                if n > 50:
+                    break
+                d = safe(json.loads, raw) or {}
+                if d.get("type") == "custom-title" and d.get("customTitle"):
+                    title = d["customTitle"]
+                    break
+    _runner_titles[session_id] = title
+    return title
+
+
+def issue_title(name):
+    # "Issue #7 - " from runners before sessions were named like the issues
+    return re.sub(r"^(?:Issue |[\w.-]+)#\d+ - ", "", name) if name else None
+
+
+def runner_run(path):
+    st = os.stat(path)
+    cached = _runner_runs.get(path)
+    if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+        return dict(cached[2])
+    m = re.match(r"(.+)-(\d+)-(\d{8}-\d{6})\.json$", os.path.basename(path))
+    if not m:
+        return None
+    run = {"repo": m.group(1), "issue": int(m.group(2)), "log": path,
+           "started": time.mktime(time.strptime(m.group(3), "%Y%m%d-%H%M%S")),
+           "ended": None, "status": "pending", "title": None, "summary": None}
+    if st.st_size:
+        run["ended"] = st.st_mtime
+        try:
+            d = json.loads(read(path))
+        except ValueError:  # claude failed before printing its JSON
+            d = {}
+        out = d.get("structured_output") or {}
+        run["status"] = out.get("status") or "failed"
+        text = out.get("question") if run["status"] == "needs_human" else out.get("summary")
+        if run["status"] == "failed" and not text:
+            text = d.get("result") or safe(lambda: read(path)[:300])
+        run["summary"] = _plain(text or "")[:400] or None
+        run["cost"] = d.get("total_cost_usd")
+        run["turns"] = d.get("num_turns")
+        if d.get("duration_ms"):
+            run["ended"] = run["started"] + d["duration_ms"] / 1000
+        if d.get("session_id"):
+            run["title"] = issue_title(safe(session_title, d["session_id"]))
+    _runner_runs[path] = (st.st_mtime, st.st_size, run)
+    return dict(run)
+
+
+def runner_worktree(path):
+    gitdir = read(os.path.join(path, ".git")).strip()[len("gitdir: "):]
+    ref = read(os.path.join(gitdir, "HEAD")).strip()
+    activity = max(safe(os.path.getmtime, os.path.join(gitdir, p)) or 0
+                   for p in ("HEAD", "index", "logs/HEAD"))
+    m = re.match(r"(.+)-(\d+)$", os.path.basename(path))
+    return {"name": os.path.basename(path), "path": path,
+            "repo": m.group(1) if m else None, "issue": int(m.group(2)) if m else None,
+            "branch": ref[16:] if ref.startswith("ref: refs/heads/") else ref[:12],
+            "activity": activity or None}
+
+
+def open_issues(conf, github, worktrees, last_run):
+    """Open issues the runner has touched (any agent-* label), with their PR,
+    worktree and last run, plus worktrees whose issue no longer qualifies (they
+    pile up if cleanup fails)."""
+    github = github or {"repos": {}}
+    wt_by = {(w["repo"], w["issue"]): w for w in worktrees}
+    rows, seen = [], set()
+    for name, data in github["repos"].items():
+        for i in data["issues"]:
+            labels = [{"name": lb.get("name"), "color": lb.get("color")} for lb in i.get("labels") or []]
+            names = {lb["name"] for lb in labels}
+            state = next((st for lb, st in AGENT_LABELS if lb in names), None)
+            key = (name, i["number"])
+            if not state and key not in wt_by:
+                continue
+            seen.add(key)
+            rows.append({"repo": name, "issue": i["number"], "title": i.get("title"), "url": i.get("url"),
+                         "labels": labels, "state": state, "updated": i.get("updatedAt"),
+                         "pr": data["prs"].get("agent/issue-%d" % i["number"])})
+    for w in worktrees:
+        key = (w["repo"], w["issue"])
+        if key in seen:
+            continue
+        # Not among the open issues GitHub returned: closed (removed on the next
+        # tick), or GitHub couldn't be reached for this repo.
+        rows.append({"repo": w["repo"], "issue": w["issue"], "title": w["title"], "url": w["url"],
+                     "labels": None, "state": "closed" if w["repo"] in github["repos"] else None,
+                     "updated": None, "pr": None})
+    order = {st: n for n, (_, st) in enumerate(AGENT_LABELS)}
+    rows.sort(key=lambda r: r["updated"] or "", reverse=True)
+    rows.sort(key=lambda r: order.get(r["state"], len(order)))
+    for r in rows:
+        w = wt_by.get((r["repo"], r["issue"]))
+        r["worktree"] = {k: w[k] for k in ("name", "path", "branch", "activity")} if w else None
+        run = last_run.get((r["repo"], r["issue"]))
+        r["last_run"] = {k: run[k] for k in ("status", "started", "log")} if run else None
+        r["title"] = r["title"] or (run and run["title"])
+    return rows
+
+
+def agent_runner(sessions, github):
+    if not os.path.isdir(RUNNER_HOME):
+        return None
+    now = time.time()
+    conf = runner_conf()
+    lock = os.path.join(RUNNER_HOME, "lock")
+    holder = safe(lock_holder, lock) if os.path.exists(lock) else None
+
+    log_dir = os.path.join(RUNNER_HOME, "logs")
+    paths = sorted((os.path.join(log_dir, n) for n in safe(os.listdir, log_dir) or [] if n.endswith(".json")),
+                   key=lambda p: os.path.basename(p).rsplit("-", 2)[-2:], reverse=True)
+    runs = [r for r in (safe(runner_run, p) for p in paths[:RUNNER_RUNS]) if r]
+    wt_root = os.path.join(RUNNER_HOME, "worktrees")
+    by_cwd = {s["cwd"]: s for s in sessions or [] if s.get("cwd")}
+    current = None
+    for r in runs:
+        if r["status"] != "pending":
+            continue
+        # An empty log is the run in progress while the lock is held; one
+        # left behind by an older run means that run was killed.
+        if holder and current is None:
+            r["status"], current = "running", r
+            s = by_cwd.get(os.path.join(wt_root, "%s-%d" % (r["repo"], r["issue"])))
+            if s:
+                r["title"] = issue_title(s.get("name")) or s.get("title")
+                r["session"] = {k: s.get(k) for k in ("pid", "status", "waiting_for", "action", "reply", "start")}
+        else:
+            r["status"] = "interrupted"
+    # Runs that failed early have no session to take a title from; borrow one
+    # from another run of the same issue.
+    titles = {(r["repo"], r["issue"]): r["title"] for r in reversed(runs) if r["title"]}
+    last_run = {}
+    for r in runs:
+        repo = conf["repos"].get(r["repo"])
+        r["url"] = "https://github.com/%s/issues/%d" % (repo, r["issue"]) if repo else None
+        r["title"] = r["title"] or titles.get((r["repo"], r["issue"]))
+        last_run.setdefault((r["repo"], r["issue"]), r)
+
+    worktrees = []
+    for name in sorted(safe(os.listdir, wt_root) or []):
+        w = safe(runner_worktree, os.path.join(wt_root, name))
+        if w:
+            repo = conf["repos"].get(w["repo"])
+            w["url"] = "https://github.com/%s/issues/%d" % (repo, w["issue"]) if repo and w["issue"] else None
+            r = last_run.get((w["repo"], w["issue"]))
+            w["title"] = r["title"] if r else None
+            worktrees.append(w)
+
+    cron_log = os.path.join(RUNNER_HOME, "cron.log")
+    lines = safe(tail, cron_log, RUNNER_LOG_LINES)
+    last_tick = None
+    for line in reversed(lines or []):
+        m = re.match(r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\]", line)
+        if m:
+            last_tick = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+            break
+
+    return {
+        "home": RUNNER_HOME,
+        "running": holder is not None,
+        "holder": holder,
+        "current": current,
+        "schedule": conf["schedule"],
+        "next_run": safe(cron_next, conf["schedule"], now) if conf["schedule"] else None,
+        "last_log_line": last_tick,
+        "runs": runs,
+        "issues": open_issues(conf, github, worktrees, last_run),
+        "worktrees": len(worktrees),
+        "github": github and {"time": github["time"], "error": github["error"]},
+        "can_start": can_start_runner(conf),
+        "log": {"path": cron_log, "available": lines is not None, "lines": lines or []},
+    }
+
+
+def can_start_runner(conf):
+    """True, or why the dashboard can't start a run itself."""
+    if not conf["command"]:
+        return "no agent-runner entry in the crontab"
+    if not os.access(RUNNER_HOME, os.W_OK):
+        # The installed service mounts home read-only unless installed with --run-agents
+        return "the dashboard can't write to %s; reinstall it with dashboard/install.sh --run-agents" % RUNNER_HOME
+    return True
+
+
+def start_runner():
+    """Start agent-runner now, as cron would (same command, PATH and log)."""
+    conf = runner_conf()
+    ok = can_start_runner(conf)
+    if ok is not True:
+        return 503, ok
+    lock = os.path.join(RUNNER_HOME, "lock")
+    if os.path.exists(lock) and safe(lock_holder, lock):
+        return 409, "a run is already in progress; issues queued after it started are picked up on the next tick"
+    log = open(os.path.join(RUNNER_HOME, "cron.log"), "ab")
+    log.write(("[%s] Started from the dashboard\n" % time.strftime("%Y-%m-%d %H:%M:%S")).encode())
+    log.flush()
+    env = dict(os.environ, PATH=conf["path"] or os.environ.get("PATH", ""))
+    try:
+        # Own session, so it outlives a dashboard restart
+        p = subprocess.Popen([conf["command"]], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                             cwd=os.path.expanduser("~"), env=env, start_new_session=True)
+    except OSError as e:
+        return 500, str(e)
+    finally:
+        log.close()
+    threading.Thread(target=p.wait, daemon=True).start()  # reap it
+    print("started agent-runner (pid %d) via dashboard" % p.pid, flush=True)
+    return 200, "started agent-runner (pid %d)" % p.pid
+
+
+def run_details(name):
+    """Everything in one run's log, plus its cron.log lines, for the run modal."""
+    if not re.fullmatch(r"[\w.-]+\.json", name or ""):
+        return None
+    path = os.path.join(RUNNER_HOME, "logs", name)
+    run = os.path.isfile(path) and runner_run(path)
+    if not run:
+        return None
+    with open(path, "rb") as f:
+        raw = f.read(RUN_RAW_MAX + 1).decode(errors="replace")
+    d = safe(json.loads, raw) if len(raw) <= RUN_RAW_MAX else None
+    d = d if isinstance(d, dict) else {}
+    out = d.get("structured_output") or {}
+    ended = run["ended"] or time.time()
+    lines, t = [], None
+    for line in safe(tail, os.path.join(RUNNER_HOME, "cron.log"), 5000) or []:
+        m = re.match(r"\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\]", line)
+        if m:
+            t = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+        if t and run["started"] - 60 <= t <= ended + 120:
+            lines.append(line)
+    return {
+        "log": path,
+        "size": os.path.getsize(path),
+        "raw": raw[:RUN_RAW_MAX],
+        "truncated": len(raw) > RUN_RAW_MAX,
+        "status": out.get("status"),
+        "summary": out.get("summary"),
+        "decisions": out.get("decisions") or [],
+        "question": out.get("question"),
+        "result": None if out else d.get("result"),
+        "is_error": d.get("is_error"),
+        "session_id": d.get("session_id"),
+        "models": sorted((d.get("modelUsage") or {}).keys()),
+        "denials": [{"tool": x.get("tool_name"), "detail": _tool_summary({"input": x.get("tool_input")})}
+                    for x in d.get("permission_denials") or [] if isinstance(x, dict)],
+        "cron": lines,
+    }
+
+
 # ---- instance metadata --------------------------------------------------------
 
 def imds():
@@ -575,14 +974,29 @@ class Sampler:
         self.history = collections.deque(maxlen=HISTORY)
         self.snapshot = {}
         self.instance = None
+        self.github = None
+        self.github_wake = threading.Event()
         self._prev = None
 
     def start(self):
         threading.Thread(target=self._imds, daemon=True).start()
         threading.Thread(target=self._loop, daemon=True).start()
+        threading.Thread(target=self._github, daemon=True).start()
 
     def _imds(self):
         self.instance = safe(imds)
+
+    def _github(self):
+        while True:
+            if os.path.isdir(RUNNER_HOME):
+                self.github = safe(github_state, runner_conf()) or self.github
+                self.resample_soon()
+            self.github_wake.wait(GH_REFRESH)
+            self.github_wake.clear()
+
+    def refresh_github_soon(self, delay=5):
+        """After starting a run: its label changes show up without waiting a minute."""
+        threading.Timer(delay, self.github_wake.set).start()
 
     def _loop(self):
         while True:
@@ -651,6 +1065,7 @@ class Sampler:
 
         self._prev = {"time": now, "cpu": cpu, "net": net,
                       "ticks": {pid: p["ticks"] for pid, p in procs.items()}}
+        claude = safe(claude_sessions, procs, rows)
 
         snap = {
             "time": now,
@@ -666,7 +1081,8 @@ class Sampler:
             "processes": {"count": len(procs), "top_cpu": top_cpu, "top_mem": top_mem},
             "ports": safe(listening, procs),
             "idle": safe(idle_state),
-            "claude": safe(claude_sessions, procs, rows),
+            "claude": claude,
+            "runner": safe(agent_runner, claude, self.github),
         }
         with self.lock:
             if cpu_pct is not None:
@@ -798,12 +1214,20 @@ class Handler(BaseHTTPRequestHandler):
             n = int(parse_qs(url.query).get("n", ["100"])[0])
             lines = safe(tail, IDLE_LOG, max(1, min(n, 2000)))
             self.json({"path": IDLE_LOG, "available": lines is not None, "lines": lines or []})
+        elif url.path == "/api/runner/run":
+            # Run logs can hold secrets the agent read: same checks as a POST,
+            # except that browsers leave Origin off same-origin GETs.
+            refused = self.refuse_foreign(origin_required=False)
+            if refused:
+                return self.reply(403, refused)
+            d = safe(run_details, parse_qs(url.query).get("log", [""])[0])
+            self.json(d) if d else self.send(404, b"no such run log\n", "text/plain")
         else:
             self.send(404, b"not found\n", "text/plain")
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/stop", "/api/hibernate"):
+        if path not in ("/api/stop", "/api/hibernate", "/api/runner/start"):
             return self.send(404, b"not found\n", "text/plain")
         refused = self.refuse_foreign()
         if refused:
@@ -815,6 +1239,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, "expected a JSON body")
         if path == "/api/hibernate":
             return self.reply(*hibernate(self.sampler.instance, dry_run=body.get("dry_run") is True))
+        if path == "/api/runner/start":
+            code, message = start_runner()
+            if code == 200:
+                self.sampler.resample_soon()
+                self.sampler.refresh_github_soon()
+            return self.reply(code, message)
         try:
             pid, start = int(body["pid"]), int(body["start"])
         except (KeyError, TypeError, ValueError):
@@ -824,7 +1254,7 @@ class Handler(BaseHTTPRequestHandler):
             self.sampler.resample_soon()
         self.reply(code, message)
 
-    def refuse_foreign(self):
+    def refuse_foreign(self, origin_required=True):
         """Reason to refuse a request that didn't come from this dashboard's
         own page, or None. A custom header can't be sent cross-origin without
         a CORS preflight, which this server never approves; Origin and Host
@@ -833,7 +1263,7 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if self.headers.get("X-Dashboard") != "1":
             return "missing X-Dashboard header"
-        if not origin or urlparse(origin).netloc != host:
+        if (origin or origin_required) and urlparse(origin or "").netloc != host:
             return "cross-origin request refused"
         if not allowed_host(host, (self.sampler.instance or {}).get("name")):
             return "unknown Host %r (add it to DASHBOARD_HOSTS)" % host
