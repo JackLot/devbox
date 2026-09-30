@@ -428,6 +428,10 @@ Restore the real window (ssm):
 sudo sed -i 's/^IDLE_MINUTES=.*/IDLE_MINUTES=30/' /etc/devbox/idle.conf
 ```
 
+**Dashboard (optional)**
+- [ ] ssm: `sudo bash /home/dev/devbox/ec2/dashboard/install.sh --user dev`, then browse `http://devbox:9999` from the laptop. Re-run it after pulling dashboard changes: the service runs a root-owned copy, never the checkout.
+- [ ] The Auto-hibernate card shows the idle checker's log. It's empty until the first check writes `/var/log/devbox-idle.log` (boxes bootstrapped before that file existed: re-run `bootstrap.sh`).
+
 ## 12. Upgrading the instance type (after verification)
 
 1. `devbox stop` (a **full stop**: a hibernated instance can't change type). Wait for `stopped`.
@@ -456,7 +460,7 @@ sudo sed -i 's/^IDLE_MINUTES=.*/IDLE_MINUTES=30/' /etc/devbox/idle.conf
 | Symptom | Look at |
 |---|---|
 | `ssh devbox` hangs | `devbox status`; `devbox ssm` then `sudo tailscale status`, `systemctl status sshd`, `sudo nft list ruleset` |
-| Never hibernates | `journalctl -t devbox-idle` names what keeps it active |
+| Never hibernates | `/var/log/devbox-idle.log` (or the dashboard) names what keeps it active |
 | Tries to hibernate, fails | `journalctl -u devbox-idle.service`: `UnauthorizedOperation` means the role policy or `Name` tag is wrong; `UnsupportedHibernationConfiguration` means the instance was launched without hibernation (relaunch) |
 | Resume came back as a fresh boot | `sudo journalctl -u hibinit-agent -b -1`; if zram is implicated, remove the zram section from `bootstrap.sh`, delete `/etc/systemd/zram-generator.conf`, reboot, re-test |
 | Need it to stay up regardless | set `IDLE_HIBERNATE=off` in `/etc/devbox/idle.conf` |

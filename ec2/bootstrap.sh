@@ -279,7 +279,8 @@ cat > /usr/local/bin/devbox-idle-check <<'EOF'
 #!/usr/bin/env bash
 
 # Hibernates this instance after a sustained idle period.
-# Run every 5 minutes by devbox-idle.timer. Decisions: journalctl -t devbox-idle
+# Run every 5 minutes by devbox-idle.timer. Decisions: /var/log/devbox-idle.log
+# (also journalctl -t devbox-idle)
 set -euo pipefail
 
 IDLE_MINUTES=30
@@ -292,6 +293,7 @@ fi
 CHECK_INTERVAL_MIN=5                  # must match devbox-idle.timer
 HEARTBEAT_DIR=/var/lib/devbox-activity
 STATE_FILE=/var/lib/devbox-idle/count # consecutive idle checks
+note() { logger -t devbox-idle "$*"; echo "$(date -u +%FT%TZ) $*" >> /var/log/devbox-idle.log; }
 LOAD_BUSY=$(awk -v n="$(nproc)" 'BEGIN { print n * 0.25 }')
 idle_checks=$(( (IDLE_MINUTES + CHECK_INTERVAL_MIN - 1) / CHECK_INTERVAL_MIN ))
 
@@ -325,7 +327,7 @@ is_active() {
 # Paused via idle.conf
 if [[ "$IDLE_HIBERNATE" != on ]]; then
   echo 0 > "$STATE_FILE"
-  logger -t devbox-idle "auto-hibernate disabled in /etc/devbox/idle.conf"
+  note "auto-hibernate disabled in /etc/devbox/idle.conf"
   exit 0
 fi
 
@@ -333,12 +335,12 @@ count=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
 
 if reason=$(is_active); then
   echo 0 > "$STATE_FILE"
-  logger -t devbox-idle "active ($reason)"
+  note "active ($reason)"
   exit 0
 fi
 
 count=$((count + 1))
-logger -t devbox-idle "idle check $count/$idle_checks"
+note "idle check $count/$idle_checks"
 
 if (( count < idle_checks )); then
   echo "$count" > "$STATE_FILE"
@@ -356,7 +358,7 @@ token=$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
 md() { curl -sf -H "X-aws-ec2-metadata-token: $token" \
   "http://169.254.169.254/latest/meta-data/$1"; }
 
-logger -t devbox-idle "idle for $IDLE_MINUTES min, hibernating"
+note "idle for $IDLE_MINUTES min, hibernating"
 
 aws ec2 stop-instances --hibernate \
   --region "$(md placement/region)" \
