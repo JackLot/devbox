@@ -8,6 +8,11 @@ Read this before starting; add to it when you learn something a future run would
 - You can't leave processes running after you exit: `nohup`, `setsid` and backgrounding are
   refused, and so is `curl`. You can start a server in the foreground briefly to check that it
   boots, but you can't keep it up or fetch its pages.
+- Bash commands containing a shell expansion (`$(...)`, `$VAR`) are refused ("Contains
+  simple_expansion"), even inside a quoted heredoc. That bites `index.html` edits, where the JS
+  uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
+- To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
+  and run `node --check` on it.
 
 ## Letting the reviewer check your change
 
