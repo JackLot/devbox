@@ -1,6 +1,6 @@
 #!/bin/bash
 # Installs the dashboard as a systemd service on any Linux box with python3.
-#   sudo bash install.sh [--user dev] [--port 9999] [--bind 0.0.0.0] [--run-agents]
+#   sudo bash install.sh [--user dev] [--port 9999] [--bind 0.0.0.0]
 #   sudo bash install.sh --uninstall
 # Files are copied to a root-owned dir, so the service never runs code from
 # the user's writable checkout. Re-run after pulling changes.
@@ -13,7 +13,6 @@ RUN_USER=${SUDO_USER:-}
 PORT=9999
 BIND=0.0.0.0
 UNINSTALL=0
-RUN_AGENTS=0
 
 while (( $# )); do
   case $1 in
@@ -21,7 +20,6 @@ while (( $# )); do
     --port) PORT=$2; shift 2 ;;
     --bind) BIND=$2; shift 2 ;;
     --uninstall) UNINSTALL=1; shift ;;
-    --run-agents) RUN_AGENTS=1; shift ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -45,16 +43,6 @@ id "$RUN_USER" >/dev/null
 PYTHON=/usr/bin/python3
 [[ -x $PYTHON ]] || { echo "$PYTHON missing" >&2; exit 1; }
 
-# --run-agents: the agent runner card's "Run now" starts agent-runner, which
-# writes to the user's home (worktrees, logs, ~/.claude). That needs home
-# writable, and KillMode=process so restarting the dashboard doesn't kill a run.
-HOME_MODE=read-only EXTRA=
-if (( RUN_AGENTS )); then
-  HOME_MODE=no
-  EXTRA="ReadWritePaths=$(getent passwd "$RUN_USER" | cut -d: -f6)
-KillMode=process"
-fi
-
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 install -d -m 755 "$LIB"
 install -m 644 "$here/server.py" "$here/index.html" "$LIB/"
@@ -73,11 +61,10 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=$HOME_MODE
+ProtectHome=read-only
 PrivateTmp=yes
 # The Hibernate button logs to the idle checker's log ("-": fine if absent)
 ReadWritePaths=-/var/log/devbox-idle.log
-$EXTRA
 
 [Install]
 WantedBy=multi-user.target

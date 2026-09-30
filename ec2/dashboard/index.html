@@ -297,7 +297,7 @@ details.fold[open] > summary svg { transform: rotate(90deg); }
 details.fold > summary:hover h3 { color: var(--ink-2); }
 .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
 .tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.runner .go { font-size: 12px; padding: 2px 10px; white-space: nowrap; }
+#runnerStart:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
 /* Copy icon fades in on hover so it's clear a click copies; opacity keeps the width fixed */
 .copy .cp { display: inline-flex; margin-left: 6px; color: var(--muted); opacity: 0; transition: opacity .1s; }
 .copy:hover .cp, .copy:focus-visible .cp { opacity: 1; }
@@ -875,16 +875,16 @@ function issueState(x) {
   return issueChip(x.state) + (x.pr ? " " + prLink(x.pr) : "");
 }
 
-// A run picks up every queued issue, so "Run now" sits in the card head beside the
-// cron countdown rather than on a row, and only while something is queued.
+// The dashboard's sandbox keeps home read-only, so it can't start a run itself;
+// while something is queued, offer the command to start one from a shell instead.
 function renderStart(r) {
   const queued = r.issues.filter(x => x.state === "queued").map(x => x.repo + "#" + x.issue);
-  $("runnerStart").hidden = !queued.length;
-  if (!queued.length) { $("runnerStart").innerHTML = ""; return; }
-  const why = r.running ? "A run is in progress; queued issues wait for the next tick"
-    : r.can_start !== true ? "Can't start runs from here: " + r.can_start : "";
-  $("runnerStart").innerHTML = `<button type="button" class="hib-btn go" data-queued="${esc(queued.join(", "))}"${why ? ` disabled title="${esc(why)}"`
-    : ` title="${esc("Start agent-runner now instead of waiting for the next cron tick\nQueued: " + queued.join(", "))}"`}>Run now · ${queued.length} queued</button>`;
+  const show = queued.length && !r.running;
+  $("runnerStart").hidden = !show;
+  // Only re-render on change, so a poll doesn't cut the "Copied" flash short
+  const html = show ? `<span class="dim">run now with</span> <button type="button" class="copy" data-copy="agent-runner"
+    title="${esc("Click to copy, then run it in a shell to start now instead of waiting for the next cron tick\nQueued: " + queued.join(", "))}">agent-runner<span class="cp" aria-hidden="true">${COPY_ICON}</span></button>` : "";
+  if ($("runnerStart").dataset.html !== html) { $("runnerStart").dataset.html = html; $("runnerStart").innerHTML = html; }
 }
 
 function renderIssues(r, now) {
@@ -930,23 +930,6 @@ document.addEventListener("click", async e => {
   // The issues table re-renders every poll; the flash only has to last until then.
   b.classList.add("done"); b.textContent = ok ? "Copied" : "Couldn't copy";
   setTimeout(() => { if (b.isConnected) { b.classList.remove("done"); b.innerHTML = was; } }, 1200);
-});
-
-document.addEventListener("click", async e => {
-  const b = e.target.closest("#runnerStart button.go");
-  if (!b) return;
-  if (!confirm(`Start agent-runner now?\n\nIt picks up every queued issue (${b.dataset.queued}), the same as the next cron tick would. Output goes to cron.log.`)) return;
-  b.disabled = true; b.textContent = "Starting…";
-  try {
-    const r = await fetch("api/runner/start", {
-      method: "POST", headers: { "Content-Type": "application/json", "X-Dashboard": "1" }, body: "{}",
-    });
-    const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
-    if (!r.ok) alert("Couldn't start it: " + res.message);
-  } catch (err) {
-    alert("Couldn't reach the dashboard server.");
-  }
-  setTimeout(poll, 1500);
 });
 
 // Run details: click a recent run (or an issue's last run).

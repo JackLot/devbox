@@ -703,7 +703,7 @@ def runner_conf():
     from reading the spool, and it fails the PAM check."""
     if time.time() - _runner_conf["time"] < RUNNER_CONF_TTL:
         return _runner_conf
-    schedule = command = path = None
+    schedule = path = None
     crontab = safe(read, os.path.join(RUNNER_HOME, "crontab"))
     for line in (crontab or "").splitlines():
         line = line.strip()
@@ -713,7 +713,6 @@ def runner_conf():
             f = line.split()
             n = 1 if f[0].startswith("@") else 5
             schedule = " ".join(f[:n])
-            command = next((w for w in f[n:] if "agent-runner" in w), None)
             break
     # <checkout name> -> owner/repo, from each watched checkout's origin remote
     repos = {}
@@ -728,7 +727,7 @@ def runner_conf():
         if m:
             repos[os.path.basename(d.rstrip("/"))] = m.group(1)
     _runner_conf.update(time=time.time(), crontab=crontab is not None, schedule=schedule,
-                        command=command, path=path, repos=repos)
+                        path=path, repos=repos)
     return _runner_conf
 
 
@@ -947,47 +946,8 @@ def agent_runner(sessions, github):
         "issues": open_issues(conf, github, worktrees, last_run),
         "worktrees": len(worktrees),
         "github": github and {"time": github["time"], "error": github["error"]},
-        "can_start": can_start_runner(conf),
         "log": {"path": cron_log, "available": lines is not None, "lines": lines or []},
     }
-
-
-def can_start_runner(conf):
-    """True, or why the dashboard can't start a run itself."""
-    if not conf["crontab"]:
-        return "%s/crontab is missing; re-run agent-runner/install.sh" % RUNNER_HOME
-    if not conf["command"]:
-        return "no agent-runner entry in the crontab"
-    if not os.access(RUNNER_HOME, os.W_OK):
-        # The installed service mounts home read-only unless installed with --run-agents
-        return "the dashboard can't write to %s; reinstall it with dashboard/install.sh --run-agents" % RUNNER_HOME
-    return True
-
-
-def start_runner():
-    """Start agent-runner now, as cron would (same command, PATH and log)."""
-    conf = runner_conf()
-    ok = can_start_runner(conf)
-    if ok is not True:
-        return 503, ok
-    lock = os.path.join(RUNNER_HOME, "lock")
-    if os.path.exists(lock) and safe(lock_holder, lock):
-        return 409, "a run is already in progress; issues queued after it started are picked up on the next tick"
-    log = open(os.path.join(RUNNER_HOME, "cron.log"), "ab")
-    log.write(("[%s] Started from the dashboard\n" % time.strftime("%Y-%m-%d %H:%M:%S")).encode())
-    log.flush()
-    env = dict(os.environ, PATH=conf["path"] or os.environ.get("PATH", ""))
-    try:
-        # Own session, so it outlives a dashboard restart
-        p = subprocess.Popen([conf["command"]], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                             cwd=os.path.expanduser("~"), env=env, start_new_session=True)
-    except OSError as e:
-        return 500, str(e)
-    finally:
-        log.close()
-    threading.Thread(target=p.wait, daemon=True).start()  # reap it
-    print("started agent-runner (pid %d) via dashboard" % p.pid, flush=True)
-    return 200, "started agent-runner (pid %d)" % p.pid
 
 
 def run_details(name):
@@ -1061,7 +1021,6 @@ class Sampler:
         self.snapshot = {}
         self.instance = None
         self.github = None
-        self.github_wake = threading.Event()
         self._prev = None
 
     def start(self):
@@ -1077,12 +1036,7 @@ class Sampler:
             if os.path.isdir(RUNNER_HOME):
                 self.github = safe(github_state, runner_conf()) or self.github
                 self.resample_soon()
-            self.github_wake.wait(GH_REFRESH)
-            self.github_wake.clear()
-
-    def refresh_github_soon(self, delay=5):
-        """After starting a run: its label changes show up without waiting a minute."""
-        threading.Timer(delay, self.github_wake.set).start()
+            time.sleep(GH_REFRESH)
 
     def _loop(self):
         while True:
@@ -1331,7 +1285,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/stop", "/api/hibernate", "/api/runner/start"):
+        if path not in ("/api/stop", "/api/hibernate"):
             return self.send(404, b"not found\n", "text/plain")
         refused = self.refuse_foreign()
         if refused:
@@ -1343,12 +1297,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, "expected a JSON body")
         if path == "/api/hibernate":
             return self.reply(*hibernate(self.sampler.instance, dry_run=body.get("dry_run") is True))
-        if path == "/api/runner/start":
-            code, message = start_runner()
-            if code == 200:
-                self.sampler.resample_soon()
-                self.sampler.refresh_github_soon()
-            return self.reply(code, message)
         try:
             pid, start = int(body["pid"]), int(body["start"])
         except (KeyError, TypeError, ValueError):

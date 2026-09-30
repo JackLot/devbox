@@ -28,9 +28,7 @@ Read this before starting; add to it when you learn something a future run would
   so does `git merge` (refused as plain Bash, as are `rebase` and `merge-tree`), e.g. to merge `main`
   into the branch when the reviewer says code changed since the PR was opened.
 - To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
-  port 0 in a thread inside `python3 -c` and call it with `urllib`. Stub `subprocess.Popen`
-  (after the first `sample()`) before exercising `/api/runner/start`, and remember it appends
-  to the real `~/.agent-runner/cron.log`; you are yourself a runner run holding the lock.
+  port 0 in a thread inside `python3 -c` and call it with `urllib`.
 - When the reviewer says they made tweaks "in the worktree", they're usually uncommitted,
   and the runner's `git reset --hard` wiped them before you started. Cursor keeps local
   history: find the `~/.cursor-server/data/User/History/*/entries.json` whose `resource`
