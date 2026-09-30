@@ -106,7 +106,9 @@ header .meta b { font-weight: 500; color: var(--ink); }
 @media (hover: none) { .hib-tile .more { opacity: 1; } }
 .hib-tile .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hib-tile .status { font-size: 12px; font-weight: 500; color: var(--ink); }
-.hib-tile .steps { max-width: none; margin: 8px 0 6px; }
+/* Same gap under the label as the big value leaves on the other tiles. */
+#hibTileS { margin-top: 8px; }
+.hib-tile .steps { max-width: none; margin: 6px 0; }
 dialog.modal {
   width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
@@ -267,8 +269,9 @@ dialog.modal::backdrop { background: rgba(0,0,0,.4); }
       <div class="label">Auto-hibernate<span class="more">Details ›</span></div>
       <div class="sub" id="hibTileS"></div>
       <div class="value" id="hibTileV">–</div>
-      <div class="steps" id="hibTileSteps" aria-hidden="true"></div>
       <div class="sub" id="hibTileSub"></div>
+      <div class="steps" id="hibTileSteps" aria-hidden="true"></div>
+      <div class="sub" id="hibTileNext"></div>
     </div>
     <div class="card tile"><div class="label">CPU</div><div class="value" id="cpuV">–</div><div class="sub" id="cpuS"></div><div class="spark" id="cpuC"></div></div>
     <div class="card tile"><div class="label">Load (1 min)</div><div class="value" id="loadV">–</div><div class="sub" id="loadS"></div><div class="spark" id="loadC"></div></div>
@@ -598,24 +601,25 @@ function renderIdle(d) {
   } else if (idle.count > 0) {
     status = ICON.warning + ` Idle, check ${idle.count} of ${idle.needed}`;
     hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
-    sub = "until hibernation · ";
+    sub = "until hibernation";
   } else {
     const reason = idle.last_status && /^active \((.*)\)$/.exec(idle.last_status.message);
     status = ICON.good + " Active" + (reason ? ": " + esc(reason[1]) : "");
     hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
-    sub = "until hibernation · ";
+    sub = "until hibernation";
   }
   const steps = Array.from({ length: idle.needed }, (_, i) => `<span class="${i < idle.count ? "on" : ""}"></span>`).join("");
   // Compact tile on the page; the modal repeats it with the facts and log.
   $("hibTileV").textContent = hero;
   $("hibTileS").innerHTML = `<span class="status">${status}</span>`;
   $("hibTileS").title = $("hibTileS").textContent.trim();
-  $("hibTileSub").innerHTML = esc(sub) + (idle.enabled ? '<span class="liveNext"></span>' : "");
+  $("hibTileSub").textContent = sub;
   $("hibTileSteps").innerHTML = steps;
+  $("hibTileNext").innerHTML = idle.enabled ? '<span class="liveNext"></span>' : "";
   $("hibStatus").innerHTML = status;
   $("hibHero").textContent = hero;
   // The idle-check countdown ticks live (tickLive); everything else is per-minute.
-  $("hibSub").innerHTML = esc(sub) + (idle.enabled ? '<span class="liveNext"></span>' : "");
+  $("hibSub").innerHTML = esc(sub) + (idle.enabled ? ' · <span class="liveNext"></span>' : "");
   $("hibSteps").innerHTML = steps;
 
   const host = d.host;
