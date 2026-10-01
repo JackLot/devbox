@@ -84,6 +84,20 @@ ensure_labels() {
   gh label create "$LABEL_FAILED"      -R "$repo" --color B60205 --description "Agent run failed" 2>/dev/null || true
 }
 
+# The part of a failed git/gh command's output that says why, as a markdown quote
+# for an issue comment, plus a hint for causes this script knows how to fix.
+failure_reason() { # <command output>
+  local lines
+  # git marks the rejected ref with " ! "; otherwise the last lines carry the error
+  lines=$(grep -E '^ ! ' <<<"$1" | sed 's/^ ! //' | head -n 3 || true)
+  [[ -n "$lines" ]] || lines=$(grep -v '^[[:space:]]*$' <<<"$1" | tail -n 3 || true)
+  sed 's/^/> /' <<<"${lines:-(no output)}"
+  if grep -q 'without `workflow` scope' <<<"$1"; then
+    echo
+    echo "The branch changes a file under \`.github/workflows/\`, which GitHub only accepts from a token with the \`workflow\` scope. Add that scope to the runner's token, then re-add \`$LABEL_TRIGGER\`."
+  fi
+}
+
 process_issue() {
 
   # Take in the arguments and set variables
@@ -141,7 +155,14 @@ process_issue() {
     rm -rf "$wt"
   fi
   if [[ -d "$wt" ]]; then
-    if ! git -C "$wt" reset --quiet --hard "$start"; then
+    # Commits an earlier run made but couldn't push exist only in the worktree;
+    # continue from them instead of resetting them away.
+    local target=$start
+    if [[ -n $(git -C "$wt" log --oneline "$start..HEAD" 2>/dev/null) ]]; then
+      log "Keeping unpushed commits in $wt"
+      target=HEAD resumed=true
+    fi
+    if ! git -C "$wt" reset --quiet --hard "$target"; then
       finish "$LABEL_FAILED" "🤖 Couldn't reset the worktree \`$wt\` to \`$start\` on the runner."
       return 1
     fi
@@ -239,11 +260,30 @@ EOF
 **Decisions made** (push back on the PR if any are wrong):
 $decisions"
 
+  # Appended to failure comments: a command the reviewer can paste to land in the worktree
+  local wt_cmd="Worktree on the runner:
+\`\`\`sh
+cd $wt
+\`\`\`"
+
   # Check if there are any commits on the branch,
   # if there are, push them to the origin
-  local has_commits=false
+  local has_commits=false out
   [[ -n $(git -C "$wt" log --oneline "$start..HEAD" 2>/dev/null) ]] && has_commits=true
-  $has_commits && git -C "$wt" push --quiet origin "HEAD:refs/heads/$branch"
+  # This function runs with errexit off (its caller uses ||), so failures are checked by hand
+  if $has_commits && ! out=$(git -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" 2>&1); then
+    log "Push failed for $repo#$number: $out"
+    finish "$LABEL_FAILED" "🤖 **Couldn't push \`$branch\`, so no PR was opened or updated.** The work is committed in the worktree; re-adding \`$LABEL_TRIGGER\` continues from it.
+
+$(failure_reason "$out")
+$([[ "$status" == "needs_human" ]] && echo "
+The agent was also blocked on a question:
+
+${question:-$summary}
+")
+$wt_cmd"
+    return 1
+  fi
 
   local pr_url
   pr_url=$(gh pr list -R "$repo" --head "$branch" --state open --json url --jq '.[0].url // empty')
@@ -253,7 +293,9 @@ $decisions"
     log "Failed $repo#$number (exit $rc)"
     finish "$LABEL_FAILED" "🤖 The agent run failed (exit code $rc).$($has_commits && echo " Partial work is on \`$branch\`.")
 
-Log on the runner: \`$logfile\`"
+Log on the runner: \`$logfile\`
+
+$wt_cmd"
   elif [[ "$status" == "needs_human" ]]; then
     log "Needs human: $repo#$number"
     finish "$LABEL_NEEDS_HUMAN" "🤖 **Blocked, needs your input.**
@@ -266,26 +308,43 @@ Reply in a comment, then re-add the \`$LABEL_TRIGGER\` label to continue."
     # A follow-up that needed an answer rather than code; the PR is still up for review
     log "Replied: $repo#$number"
     finish "$LABEL_PR" "🤖 $summary"
-  elif ! $has_commits; then
+  elif ! $has_commits && [[ -z $(git -C "$wt" log --oneline "origin/$base..HEAD" 2>/dev/null) ]]; then
+    # (A pushed branch that is ahead of the base but has no PR, e.g. because opening
+    # it failed last time, falls through to the PR step instead.)
     log "No commits: $repo#$number"
     finish "$LABEL_FAILED" "🤖 The agent finished without committing anything.
 
-$summary"
+$summary
+
+$wt_cmd"
   else
+    local verb=Updated failed=false
     if [[ -n "$pr_url" ]]; then
-      gh pr comment "$pr_url" --body "🤖 Pushed an update for #$number.
+      out=$(gh pr comment "$pr_url" --body "🤖 Pushed an update for #$number.
 
 $summary
-$decisions" >/dev/null
+$decisions" 2>&1) || failed=true
     else
-      pr_url=$(gh pr create -R "$repo" --base "$base" --head "$branch" --title "$title" \
+      verb=Opened
+      out=$(gh pr create -R "$repo" --base "$base" --head "$branch" --title "$title" \
         --body "Closes #$number
 
 $summary
-$decisions")
+$decisions" 2>&1) || failed=true
+      pr_url=$(grep -Eo 'https://[^[:space:]]+/pull/[0-9]+' <<<"$out" | tail -n 1 || true)
+      [[ -n "$pr_url" ]] || failed=true
+    fi
+    if $failed; then
+      log "PR step failed for $repo#$number: $out"
+      finish "$LABEL_FAILED" "🤖 **Pushed \`$branch\`, but couldn't $([[ $verb == Opened ]] && echo "open a PR" || echo "comment on $pr_url").**
+
+$(failure_reason "$out")
+
+$wt_cmd"
+      return 1
     fi
     log "PR: $pr_url"
-    finish "$LABEL_PR" "🤖 $($resumed && echo "Updated" || echo "Opened") $pr_url"
+    finish "$LABEL_PR" "🤖 $verb $pr_url"
   fi
 }
 
