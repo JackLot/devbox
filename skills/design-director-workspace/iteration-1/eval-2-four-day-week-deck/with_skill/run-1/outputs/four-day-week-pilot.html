@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four-day week pilot: Support</title>
+<style>
+  :root {
+    --paper: #f3efe7;
+    --ink: #1d1b18;
+    --muted: #68625a;
+    --hair: #d3ccbf;
+    --accent: #c2410c;
+    --accent-on-ink: #f08a52;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: "Helvetica Neue", Helvetica, "Segoe UI", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #14130f; overflow: hidden; }
+  body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+
+  /* Fixed 1280x720 stage, scaled to fit the window */
+  #stage {
+    position: absolute; left: 50%; top: 50%;
+    width: 1280px; height: 720px;
+    transform-origin: 0 0;
+    background: var(--paper);
+    overflow: hidden;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    padding: 72px 96px 0 96px;
+    background: var(--paper);
+    opacity: 0; visibility: hidden;
+    transition: opacity .25s ease;
+  }
+  .slide.on { opacity: 1; visibility: visible; }
+  @media (prefers-reduced-motion: reduce) { .slide { transition: none; } }
+
+  .kicker {
+    font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.015em; text-wrap: balance; }
+  h2 { font-size: 52px; line-height: 1.12; margin-top: 24px; max-width: 940px; }
+  p { font-size: 24px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+  p strong, .ink { color: var(--ink); font-weight: 500; }
+  .num { font-family: var(--serif); font-variant-numeric: lining-nums tabular-nums; letter-spacing: -.03em; }
+
+  .foot {
+    position: absolute; left: 96px; right: 96px; bottom: 40px;
+    display: flex; justify-content: space-between;
+    font-size: 14px; letter-spacing: .04em; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The motif: a working week, with one day given back */
+  .week { display: flex; gap: 8px; }
+  .week i { display: block; width: 72px; height: 72px; background: var(--ink); }
+  .week i.off { background: transparent; border: 2px dashed var(--accent); }
+  .week.sm i { width: 48px; height: 48px; }
+  .week.sm { gap: 6px; }
+
+  /* 1 Cover */
+  .cover h1 { font-size: 124px; line-height: .98; margin-top: 48px; letter-spacing: -.025em; }
+  .cover p { margin-top: 32px; max-width: 900px; font-size: 26px; }
+  .cover .week { position: absolute; left: 96px; bottom: 104px; }
+
+  /* 2 Problem */
+  .problem .big { font-size: 248px; line-height: .9; color: var(--accent); margin: 32px 0 0 -8px; }
+  .problem .cols { display: grid; grid-template-columns: 600px 1fr; column-gap: 88px; margin-top: 40px; align-items: start; }
+  .problem h2 { font-size: 40px; margin-top: 0; line-height: 1.15; }
+  .problem .cols p { margin-top: 16px; }
+  .bars { display: grid; row-gap: 16px; padding-top: 8px; }
+  .bar-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; font-size: 17px; color: var(--muted); }
+  .bar { height: 24px; background: var(--hair); width: 230px; }
+  .bar.now { background: var(--accent); width: 299px; }
+  .bar-row.now-row { color: var(--ink); font-weight: 600; }
+  .bars small { grid-column: 1 / -1; font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+  /* 3 Market */
+  .market .cols { display: grid; grid-template-columns: 560px 1fr; column-gap: 96px; margin-top: 72px; align-items: start; }
+  .rows { display: grid; row-gap: 24px; }
+  .row { display: grid; grid-template-columns: 148px auto 1fr; align-items: center; column-gap: 24px; font-size: 20px; color: var(--muted); }
+  .row .who { color: var(--ink); font-weight: 500; }
+  .row.us { padding-top: 24px; border-top: 1px solid var(--hair); }
+  .row .n { font-size: 17px; }
+  .row.us .n { color: var(--ink); font-weight: 600; }
+
+  /* 4 Proposal */
+  .trio { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 64px; margin-top: 56px; }
+  .trio > div { border-top: 1px solid var(--ink); padding-top: 16px; }
+  .trio .num { font-size: 136px; line-height: 1; }
+  .trio .lab { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink); margin-top: 8px; }
+  .trio p { font-size: 21px; margin-top: 16px; }
+
+  /* 5 Measures */
+  .measures { display: grid; grid-template-columns: 1fr 1fr; column-gap: 64px; margin-top: 56px; }
+  .measures > div { border-top: 1px solid var(--ink); padding-top: 16px; }
+  .measures h3 { font-family: var(--serif); font-weight: 400; font-size: 44px; letter-spacing: -.01em; }
+  .measures p { font-size: 24px; margin-top: 8px; }
+  .timeline { position: absolute; left: 96px; right: 96px; bottom: 112px; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
+  .timeline div { border-top: 4px solid var(--hair); padding-top: 12px; font-size: 17px; color: var(--muted); line-height: 1.35; }
+  .timeline div b { display: block; color: var(--ink); font-weight: 600; }
+  .timeline div.run { border-top-color: var(--ink); }
+  .timeline div.decide { border-top-color: var(--accent); }
+  .timeline div + div { margin-left: 4px; }
+
+  /* 6 Cost: the one inverted slide */
+  .cost, .cost.slide { background: var(--ink); }
+  .cost .kicker, .cost .foot { color: #a39c90; }
+  .cost h2 { color: var(--paper); font-size: 92px; line-height: 1.02; margin-top: 56px; max-width: 1000px; letter-spacing: -.025em; }
+  .cost h2 em { font-style: normal; color: var(--accent-on-ink); }
+  .cost ul { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 64px; position: absolute; left: 96px; right: 96px; bottom: 112px; }
+  .cost li { border-top: 1px solid #5a554d; padding-top: 16px; font-size: 24px; line-height: 1.35; color: var(--paper); }
+  .cost li span { display: block; font-size: 19px; color: #a39c90; margin-top: 4px; }
+
+  /* 7 Ask */
+  .ask h2 { font-size: 64px; line-height: 1.08; max-width: 1000px; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 64px; position: absolute; left: 96px; right: 96px; bottom: 112px; }
+  .steps > div { border-top: 1px solid var(--ink); padding-top: 16px; }
+  .steps .lab { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .steps > div:first-child { border-top: 4px solid var(--accent); padding-top: 13px; }
+  .steps > div:first-child .lab { color: var(--accent); }
+  .steps p { font-size: 21px; margin-top: 8px; }
+
+  /* Navigation hit areas */
+  .nav { position: fixed; top: 0; bottom: 0; width: 50%; background: none; border: 0; cursor: pointer; z-index: 5; opacity: 0; }
+  .nav.prev { left: 0; cursor: w-resize; } .nav.next { right: 0; cursor: e-resize; }
+
+  @media print {
+    @page { size: 1280px 720px; margin: 0; }
+    html, body { overflow: visible; height: auto; background: none; }
+    #stage { position: static; transform: none !important; height: auto; overflow: visible; }
+    .slide { position: relative; height: 720px; opacity: 1; visibility: visible; page-break-after: always; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .nav { display: none; }
+  }
+</style>
+</head>
+<body>
+<main id="stage" aria-live="polite">
+
+  <section class="slide cover on" aria-label="Slide 1 of 7">
+    <div class="kicker">Proposal for the leadership team</div>
+    <h1>Four days.<br>Same support.</h1>
+    <p>A three-month pilot of a four-day week for the support team.</p>
+    <div class="week" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="off"></i></div>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>1 / 7</span></div>
+  </section>
+
+  <section class="slide problem" aria-label="Slide 2 of 7">
+    <div class="kicker">The problem</div>
+    <div class="num big">+30%</div>
+    <div class="cols">
+      <div>
+        <h2>Burnout on the support team is up 30% this year.</h2>
+        <p>These are the people answering our customers. Burnout tends to show up next as turnover and slower, weaker support.</p>
+      </div>
+      <div class="bars" aria-label="Burnout score, last year versus this year">
+        <div class="bar-row"><span>Last year</span><span class="bar"></span></div>
+        <div class="bar-row now-row"><span>This year</span><span class="bar now"></span></div>
+        <small>Support team burnout score, indexed to last year</small>
+      </div>
+    </div>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>2 / 7</span></div>
+  </section>
+
+  <section class="slide market" aria-label="Slide 3 of 7">
+    <div class="kicker">The market</div>
+    <h2>Two of our competitors already work a four-day week.</h2>
+    <div class="cols">
+      <div class="rows">
+        <div class="row"><span class="who">Competitor</span><span class="week sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="off"></i></span><span class="n">4 days</span></div>
+        <div class="row"><span class="who">Competitor</span><span class="week sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="off"></i></span><span class="n">4 days</span></div>
+        <div class="row us"><span class="who">Us</span><span class="week sm" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="n">5 days</span></div>
+      </div>
+      <p>The companies we hire from, and lose people to, are offering a schedule we don’t. <strong>This is no longer an untested idea in our market.</strong></p>
+    </div>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>3 / 7</span></div>
+  </section>
+
+  <section class="slide proposal" aria-label="Slide 4 of 7">
+    <div class="kicker">The proposal</div>
+    <h2>A small, time-boxed test before we commit to anything.</h2>
+    <div class="trio">
+      <div>
+        <div class="num">12</div>
+        <div class="lab">People</div>
+        <p>Support agents on the pilot. Big enough to show a real signal, small enough to contain.</p>
+      </div>
+      <div>
+        <div class="num">3</div>
+        <div class="lab">Months</div>
+        <p>Long enough to get past the novelty. Short enough to reverse cleanly.</p>
+      </div>
+      <div>
+        <div class="num">4</div>
+        <div class="lab">Days a week</div>
+        <p>Same pay. Days off staggered, so the queue is still covered all five days.</p>
+      </div>
+    </div>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>4 / 7</span></div>
+  </section>
+
+  <section class="slide measure" aria-label="Slide 5 of 7">
+    <div class="kicker">How we’ll know</div>
+    <h2>Two numbers decide it, and customers set both.</h2>
+    <div class="measures">
+      <div>
+        <h3>CSAT</h3>
+        <p>Are customers as happy with the support they get?</p>
+      </div>
+      <div>
+        <h3>Ticket resolution time</h3>
+        <p>Are their issues solved as fast?</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <div><b>Before</b>Baseline both numbers</div>
+      <div class="run"><b>Month 1</b>Pilot running</div>
+      <div class="run"><b>Month 2</b>Pilot running</div>
+      <div class="run"><b>Month 3</b>Pilot running</div>
+      <div class="decide"><b>Decision</b>Held or improved = success</div>
+    </div>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>5 / 7</span></div>
+  </section>
+
+  <section class="slide cost" aria-label="Slide 6 of 7">
+    <div class="kicker">The cost</div>
+    <h2>Finding out costs us <em>basically nothing.</em></h2>
+    <ul>
+      <li>No new headcount<span>The same 12 people cover the queue.</span></li>
+      <li>No change to pay<span>Salaries stay exactly as they are.</span></li>
+      <li>No lock-in<span>If the numbers slip, we return to five days.</span></li>
+    </ul>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>6 / 7</span></div>
+  </section>
+
+  <section class="slide ask" aria-label="Slide 7 of 7">
+    <div class="kicker">The ask</div>
+    <h2>Approve a three-month, four-day-week pilot for 12 people in support.</h2>
+    <div class="steps">
+      <div>
+        <div class="lab">Today</div>
+        <p><span class="ink">Your go-ahead</span> to run the pilot.</p>
+      </div>
+      <div>
+        <div class="lab">During</div>
+        <p>We track CSAT and resolution time against the baseline.</p>
+      </div>
+      <div>
+        <div class="lab">After month 3</div>
+        <p>We bring the results back. You decide: extend, adjust or stop.</p>
+      </div>
+    </div>
+    <div class="foot"><span>Support · Four-day week pilot</span><span>7 / 7</span></div>
+  </section>
+
+</main>
+
+<button class="nav prev" aria-label="Previous slide"></button>
+<button class="nav next" aria-label="Next slide"></button>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var slides = [].slice.call(document.querySelectorAll('.slide'));
+  var i = 0;
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    stage.style.transform = 'scale(' + s + ') translate(-50%, -50%)';
+  }
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (el, k) { el.classList.toggle('on', k === i); });
+    try { history.replaceState(null, '', '#' + (i + 1)); } catch (e) {}
+  }
+  document.addEventListener('keydown', function (e) {
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].indexOf(e.key) > -1) { e.preventDefault(); go(i + 1); }
+    else if (['ArrowLeft', 'PageUp', 'Backspace'].indexOf(e.key) > -1) { e.preventDefault(); go(i - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'f' && stage.requestFullscreen) document.documentElement.requestFullscreen();
+  });
+  document.querySelector('.prev').addEventListener('click', function () { go(i - 1); this.blur(); });
+  document.querySelector('.next').addEventListener('click', function () { go(i + 1); this.blur(); });
+  var x0 = null;
+  document.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 40) go(i + (dx < 0 ? 1 : -1));
+  });
+  window.addEventListener('resize', fit);
+  fit();
+  go((parseInt(location.hash.slice(1), 10) || 1) - 1);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "skill_name": "design-director",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a sales dashboard as a single HTML page for our Q3 numbers. Revenue was $4.2M (up 18% QoQ), 312 new customers, churn 2.1%, pipeline $9.8M. Break revenue down by region (NA 52%, EMEA 31%, APAC 17%) and show the monthly trend Jul/Aug/Sep: 1.2M, 1.4M, 1.6M. Top 5 reps table too, make up plausible names.",
+      "expected_output": "A single HTML file with clear hierarchy (headline metrics lead), a deliberate type and color system with one accent, directly labeled charts, and no generic tells. Response is brief with no narration of the design process.",
+      "files": [],
+      "assertions": [
+        "A single HTML file is saved in outputs",
+        "All given figures appear correctly ($4.2M, 18%, 312, 2.1%, $9.8M, 52/31/17, 1.2M/1.4M/1.6M)",
+        "The reply to the user is brief and does not narrate design passes or techniques",
+        "No placeholder text or obviously fake names (lorem ipsum, John Doe)",
+        "Chart or section titles state a finding rather than only a topic"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Make a presentation deck (6-8 slides) pitching our leadership team on moving the support team to a 4-day week pilot. Key points: burnout scores up 30% this year, two competitors already do it, proposed 3-month pilot with 12 people, success measured by CSAT and ticket resolution time, cost is basically zero.",
+      "expected_output": "A deck with varied slide rhythm (not all title plus bullets), takeaway-sentence titles, large readable type, consistent margins, and one emphasized statistic. Response is brief.",
+      "files": [],
+      "assertions": [
+        "A single self-contained HTML deck with 6-8 slides is saved in outputs",
+        "All five key points from the request are covered",
+        "The reply to the user is brief and does not narrate design passes or techniques",
+        "Not every slide is a title plus bullet list (at least two distinct slide layouts)",
+        "Slide titles are takeaway sentences rather than topic labels"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I need a one-page PDF report summarizing our customer survey: 1,240 responses, NPS 47 (was 39), top complaint is onboarding complexity (38% mention), top praise is support responsiveness (61%). Three recommendations: simplify setup wizard, add in-app guides, keep support staffing. It's going to the exec team.",
+      "expected_output": "A one-page PDF with editorial hierarchy, a finding-led headline, the NPS change as the focal point, real margins, and survives grayscale. Response is brief.",
+      "files": [],
+      "assertions": [
+        "A PDF is saved in outputs and is exactly one page",
+        "All given figures appear correctly (1,240, NPS 47 from 39, 38%, 61%) and all three recommendations",
+        "The reply to the user is brief and does not narrate design passes or techniques",
+        "The headline states a finding rather than only a topic"
+      ]
+    }
+  ]
+}

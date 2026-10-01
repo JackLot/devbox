@@ -1,0 +1,39 @@
+{
+  "expectations": [
+    {
+      "text": "A single self-contained HTML deck with 6-8 slides is saved in outputs",
+      "passed": true,
+      "evidence": "Single HTML file, 7 slides"
+    },
+    {
+      "text": "All five key points from the request are covered",
+      "passed": true,
+      "evidence": "All five key points have a slide"
+    },
+    {
+      "text": "The reply to the user is brief and does not narrate design passes or techniques",
+      "passed": true,
+      "evidence": "Reply gives the slide order and assumptions to check; no design narration"
+    },
+    {
+      "text": "Not every slide is a title plus bullet list (at least two distinct slide layouts)",
+      "passed": true,
+      "evidence": "No bullet lists at all; cover uses a Mon-Fri tile motif, other slides use charts and cards"
+    },
+    {
+      "text": "Slide titles are takeaway sentences rather than topic labels",
+      "passed": true,
+      "evidence": "Titles are sentences, e.g. 'The pilot costs basically nothing to run'"
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "executor_duration_seconds": 70.0,
+    "total_duration_seconds": 70.0
+  }
+}

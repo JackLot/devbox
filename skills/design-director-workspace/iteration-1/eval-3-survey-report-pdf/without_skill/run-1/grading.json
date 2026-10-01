@@ -1,0 +1,34 @@
+{
+  "expectations": [
+    {
+      "text": "A PDF is saved in outputs and is exactly one page",
+      "passed": true,
+      "evidence": "customer-survey-summary.pdf saved; PDF page tree reports one page"
+    },
+    {
+      "text": "All given figures appear correctly (1,240, NPS 47 from 39, 38%, 61%) and all three recommendations",
+      "passed": true,
+      "evidence": "1,240, 47, 39, 61%, 38% and all three recommendations visible in the preview"
+    },
+    {
+      "text": "The reply to the user is brief and does not narrate design passes or techniques",
+      "passed": true,
+      "evidence": "Reply summarizes content and flags the headline and rationales; no design narration"
+    },
+    {
+      "text": "The headline states a finding rather than only a topic",
+      "passed": true,
+      "evidence": "Headline: 'Customer sentiment is up 8 points. Onboarding is what stands between us and the next gain.'"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "executor_duration_seconds": 49.6,
+    "total_duration_seconds": 49.6
+  }
+}

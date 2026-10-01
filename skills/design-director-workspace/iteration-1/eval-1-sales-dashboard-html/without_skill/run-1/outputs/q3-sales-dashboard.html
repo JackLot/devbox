@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q3 Sales Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e5ea;
+    --text: #151a23;
+    --muted: #5d6675;
+    --grid: #e6e9ee;
+    --accent: #2456c9;
+    --accent-2: #6f95e6;
+    --accent-3: #b3c6f2;
+    --track: #edf0f5;
+    --pos: #12703f;
+    --pos-bg: #e2f4ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218;
+      --surface: #181c25;
+      --border: #2a303c;
+      --text: #eceff4;
+      --muted: #9aa3b2;
+      --grid: #2a303c;
+      --accent: #6f9bff;
+      --accent-2: #4a6fc4;
+      --accent-3: #33488a;
+      --track: #232936;
+      --pos: #6fdc9f;
+      --pos-bg: #173626;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; margin-bottom: 24px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  h2 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .card > .sub { margin: 0 0 16px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+  .kpi .label { color: var(--muted); font-size: 13px; }
+  .kpi .value { font-size: 32px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .delta { display: inline-block; background: var(--pos-bg); color: var(--pos); font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-right: 4px; }
+
+  .charts { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-bottom: 16px; }
+
+  svg { display: block; width: 100%; height: auto; }
+  svg text { fill: var(--muted); font-size: 12px; font-family: inherit; }
+  svg .val { fill: var(--text); font-size: 14px; font-weight: 600; }
+  svg .grid { stroke: var(--grid); stroke-width: 1; }
+  svg .bar { fill: var(--accent); }
+
+  .split { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; margin-bottom: 20px; }
+  .split span:nth-child(1) { background: var(--accent); width: 52%; }
+  .split span:nth-child(2) { background: var(--accent-2); width: 31%; }
+  .split span:nth-child(3) { background: var(--accent-3); width: 17%; }
+  .regions { list-style: none; margin: 0; padding: 0; }
+  .regions li { display: grid; grid-template-columns: 12px 1fr auto auto; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .regions li:first-child { border-top: 0; padding-top: 0; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; }
+  .regions .amt { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .regions .pct { font-weight: 650; font-size: 18px; width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 560px; }
+  th, td { text-align: left; padding: 11px 12px; border-top: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border-top: 0; padding-top: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td:first-child, th:first-child { padding-left: 0; width: 2em; color: var(--muted); }
+  td.name { font-weight: 600; }
+  .meter { display: inline-block; vertical-align: middle; width: 90px; height: 6px; border-radius: 3px; background: var(--track); margin-right: 10px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 16px; }
+
+  @media (max-width: 860px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 440px) {
+    .kpis { grid-template-columns: 1fr; }
+    .kpi .value { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Q3 Sales Dashboard</h1>
+    <div class="sub">July &ndash; September &middot; Quarter closed</div>
+  </header>
+
+  <section class="kpis" aria-label="Key metrics">
+    <div class="card kpi">
+      <div class="label">Revenue</div>
+      <div class="value">$4.2M</div>
+      <div class="note"><span class="delta">&#9650; 18%</span> vs Q2</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">New customers</div>
+      <div class="value">312</div>
+      <div class="note">Added in the quarter</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Churn</div>
+      <div class="value">2.1%</div>
+      <div class="note">Quarterly churn rate</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Pipeline</div>
+      <div class="value">$9.8M</div>
+      <div class="note">2.3&times; Q3 revenue</div>
+    </div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <h2>Monthly revenue</h2>
+      <p class="sub">Each month grew by $0.2M; September was the strongest at $1.6M</p>
+      <svg viewBox="0 0 520 250" role="img" aria-label="Bar chart of monthly revenue: July 1.2 million dollars, August 1.4 million, September 1.6 million">
+        <line class="grid" x1="52" x2="510" y1="20" y2="20"/>
+        <line class="grid" x1="52" x2="510" y1="65" y2="65"/>
+        <line class="grid" x1="52" x2="510" y1="110" y2="110"/>
+        <line class="grid" x1="52" x2="510" y1="155" y2="155"/>
+        <line class="grid" x1="52" x2="510" y1="200" y2="200"/>
+        <text x="44" y="24" text-anchor="end">$2.0M</text>
+        <text x="44" y="69" text-anchor="end">$1.5M</text>
+        <text x="44" y="114" text-anchor="end">$1.0M</text>
+        <text x="44" y="159" text-anchor="end">$0.5M</text>
+        <text x="44" y="204" text-anchor="end">$0</text>
+
+        <rect class="bar" x="92" y="92" width="80" height="108" rx="4"/>
+        <rect class="bar" x="241" y="74" width="80" height="126" rx="4"/>
+        <rect class="bar" x="390" y="56" width="80" height="144" rx="4"/>
+
+        <text class="val" x="132" y="84" text-anchor="middle">$1.2M</text>
+        <text class="val" x="281" y="66" text-anchor="middle">$1.4M</text>
+        <text class="val" x="430" y="48" text-anchor="middle">$1.6M</text>
+
+        <text x="132" y="222" text-anchor="middle">Jul</text>
+        <text x="281" y="222" text-anchor="middle">Aug</text>
+        <text x="430" y="222" text-anchor="middle">Sep</text>
+        <text x="281" y="240" text-anchor="middle">+17% MoM</text>
+        <text x="430" y="240" text-anchor="middle">+14% MoM</text>
+      </svg>
+    </div>
+
+    <div class="card">
+      <h2>Revenue by region</h2>
+      <p class="sub">North America is just over half of the quarter</p>
+      <div class="split" role="img" aria-label="Revenue share: North America 52%, EMEA 31%, APAC 17%">
+        <span></span><span></span><span></span>
+      </div>
+      <ul class="regions">
+        <li><span class="dot" style="background:var(--accent)"></span><span>North America</span><span class="amt">$2.18M</span><span class="pct">52%</span></li>
+        <li><span class="dot" style="background:var(--accent-2)"></span><span>EMEA</span><span class="amt">$1.30M</span><span class="pct">31%</span></li>
+        <li><span class="dot" style="background:var(--accent-3)"></span><span>APAC</span><span class="amt">$0.71M</span><span class="pct">17%</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Top 5 reps</h2>
+    <p class="sub">Ranked by closed revenue in Q3 &middot; sample data</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Rep</th><th>Region</th><th class="num">Deals</th><th class="num">Revenue</th><th>Quota attainment</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td class="name">Priya Raman</td><td>North America</td><td class="num">21</td><td class="num">$486K</td><td><span class="meter"><i style="width:100%"></i></span>128%</td></tr>
+          <tr><td>2</td><td class="name">Marcus Oyelaran</td><td>EMEA</td><td class="num">18</td><td class="num">$432K</td><td><span class="meter"><i style="width:100%"></i></span>117%</td></tr>
+          <tr><td>3</td><td class="name">Hannah Lindqvist</td><td>North America</td><td class="num">17</td><td class="num">$391K</td><td><span class="meter"><i style="width:100%"></i></span>109%</td></tr>
+          <tr><td>4</td><td class="name">Diego Fuentes</td><td>North America</td><td class="num">15</td><td class="num">$357K</td><td><span class="meter"><i style="width:98%"></i></span>98%</td></tr>
+          <tr><td>5</td><td class="name">Mei-Ling Zhao</td><td>APAC</td><td class="num">14</td><td class="num">$318K</td><td><span class="meter"><i style="width:91%"></i></span>91%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Regional dollar amounts are derived from the stated shares of $4.2M. Rep names, deal counts, revenue and quota figures are placeholders, not real data.
+  </footer>
+</main>
+</body>
+</html>

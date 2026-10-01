@@ -1,0 +1,39 @@
+{
+  "expectations": [
+    {
+      "text": "A single HTML file is saved in outputs",
+      "passed": true,
+      "evidence": "q3-sales-dashboard.html saved"
+    },
+    {
+      "text": "All given figures appear correctly ($4.2M, 18%, 312, 2.1%, $9.8M, 52/31/17, 1.2M/1.4M/1.6M)",
+      "passed": true,
+      "evidence": "All eleven figures found in the HTML"
+    },
+    {
+      "text": "The reply to the user is brief and does not narrate design passes or techniques",
+      "passed": true,
+      "evidence": "Reply lists the four parts and the added figures; no design narration"
+    },
+    {
+      "text": "No placeholder text or obviously fake names (lorem ipsum, John Doe)",
+      "passed": true,
+      "evidence": "Plausible names, labelled sample data"
+    },
+    {
+      "text": "Chart or section titles state a finding rather than only a topic",
+      "passed": true,
+      "evidence": "Panel titles are topics ('Monthly revenue', 'Top 5 reps') but subtitles state findings ('North America is just over half of the quarter'); page title is the topic 'Q3 Sales Dashboard'. Borderline pass."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "executor_duration_seconds": 50.0,
+    "total_duration_seconds": 50.0
+  }
+}

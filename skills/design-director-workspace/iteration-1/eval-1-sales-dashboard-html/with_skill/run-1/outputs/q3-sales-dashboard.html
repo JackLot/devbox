@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q3 Sales Review</title>
+<style>
+  :root {
+    --bg: #f7f5f0;
+    --ink: #1b1f1d;
+    --ink-2: #4c534f;
+    --ink-3: #6b726e;
+    --rule: #dcd8ce;
+    --rule-strong: #1b1f1d;
+    --accent: #0f6b5a;
+    --accent-soft: #c9ddd6;
+    --track: #e9e5db;
+    --tip-bg: #1b1f1d;
+    --tip-ink: #f7f5f0;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141715;
+      --ink: #ecebe6;
+      --ink-2: #b5b9b4;
+      --ink-3: #8f9590;
+      --rule: #2e3330;
+      --rule-strong: #ecebe6;
+      --accent: #58bfa6;
+      --accent-soft: #24443c;
+      --track: #232825;
+      --tip-bg: #ecebe6;
+      --tip-ink: #141715;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums lining-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 56px 40px 48px;
+  }
+
+  /* Shared pieces */
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    column-gap: 72px;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 21px;
+    line-height: 1.25;
+    letter-spacing: -0.005em;
+    margin: 8px 0 0;
+    text-wrap: balance;
+  }
+  .section { border-top: 1px solid var(--rule); padding-top: 20px; }
+
+  /* Masthead */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--rule-strong);
+  }
+  header .eyebrow { color: var(--ink); }
+  header .period { font-size: 13px; color: var(--ink-3); margin: 0; white-space: nowrap; }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(28px, 3.6vw, 42px);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    margin: 40px 0 0;
+    max-width: 21em;
+    text-wrap: balance;
+  }
+
+  /* Hero row */
+  .hero { margin-top: 48px; align-items: stretch; }
+  .revenue { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 40px; align-items: end; }
+  .figure {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(84px, 8.4vw, 104px);
+    line-height: 0.86;
+    letter-spacing: -0.035em;
+    margin: 20px 0 0;
+    color: var(--ink);
+  }
+  .delta { margin: 24px 0 0; font-size: 15px; color: var(--ink-2); }
+  .delta strong { color: var(--accent); font-weight: 600; }
+
+  /* Monthly chart */
+  .chart { position: relative; padding-right: 84px; }
+  .plot {
+    position: relative;
+    height: 200px;            /* 200px = $1.6M, zero baseline */
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    border-bottom: 1px solid var(--ink-3);
+  }
+  .bar {
+    position: relative;
+    flex: 1;
+    background: var(--accent-soft);
+    border-radius: 4px 4px 0 0;
+    outline: none;
+    transition: background-color 120ms ease;
+  }
+  .bar.last { background: var(--accent); }
+  .bar:hover, .bar:focus-visible { background: var(--accent); }
+  .bar:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
+  .bar .val {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 100%;
+    padding-bottom: 6px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .bar .tip {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    background: var(--tip-bg);
+    color: var(--tip-ink);
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+    z-index: 2;
+  }
+  .bar:hover .tip, .bar:focus-visible .tip { opacity: 1; }
+  .ref {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 148px;            /* $1.19M */
+    border-top: 1px dashed var(--ink-2);
+    pointer-events: none;
+  }
+  .ref span {
+    position: absolute;
+    left: 100%;
+    top: -9px;
+    width: 84px;
+    padding-left: 10px;
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--ink-3);
+  }
+  .months { display: flex; gap: 2px; margin-top: 8px; }
+  .months span { flex: 1; text-align: center; font-size: 12px; color: var(--ink-3); }
+
+  /* Supporting metrics */
+  .metrics { display: flex; flex-direction: column; justify-content: flex-end; margin: 0; }
+  .metric {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    column-gap: 16px;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+  }
+  .metric:last-child { padding-bottom: 0; }
+  .metric dt { font-size: 14px; color: var(--ink-2); }
+  .metric dt small { display: block; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .metric dd {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 34px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  /* Lower row */
+  .lower { margin-top: 64px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  th {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: left;
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--rule);
+  }
+  td { padding: 11px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  th.num, td.num { text-align: right; }
+  td.rank { width: 28px; color: var(--ink-3); font-size: 13px; }
+  td.name { font-weight: 600; white-space: nowrap; padding-right: 16px; }
+  td.region { color: var(--ink-2); font-size: 14px; width: 72px; }
+  th.region { color: var(--ink-3); }
+  td.spark { width: 34%; padding-left: 24px; padding-right: 16px; }
+  td.rev { font-weight: 600; width: 64px; }
+  td.cust { width: 96px; color: var(--ink-2); }
+  .meter { height: 6px; border-radius: 0 3px 3px 0; background: var(--accent-soft); }
+  tr.lead .meter { background: var(--accent); }
+  tbody tr:hover .meter { background: var(--accent); }
+
+  .regions { list-style: none; margin: 20px 0 0; padding: 0; }
+  .regions li { padding: 11px 0 14px; border-bottom: 1px solid var(--rule); }
+  .regions li:last-child { border-bottom: 0; }
+  .regions .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .regions .who { font-weight: 600; }
+  .regions .who small { font-weight: 400; font-size: 13px; color: var(--ink-3); margin-left: 6px; }
+  .regions .pct { font-family: var(--serif); font-size: 22px; line-height: 1; letter-spacing: -0.01em; }
+  .regions .track { margin-top: 10px; height: 6px; background: var(--track); border-radius: 3px; }
+  .regions .fill { height: 100%; background: var(--accent-soft); border-radius: 3px; }
+  .regions li:first-child .fill { background: var(--accent); }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 12px;
+    color: var(--ink-3);
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  footer p { margin: 0; max-width: 62em; }
+
+  @media (max-width: 900px) {
+    .page { padding: 32px 20px 32px; }
+    .cols { grid-template-columns: 1fr; row-gap: 48px; }
+    .revenue { grid-template-columns: 1fr; row-gap: 40px; }
+    .hero { margin-top: 32px; }
+    .lower { margin-top: 48px; }
+    h1 { margin-top: 28px; }
+    td.region, th.region { display: none; }
+    td.spark { width: 26%; padding-left: 12px; padding-right: 12px; }
+    td.cust { width: 56px; }
+    th .long { display: none; }
+  }
+  @media (max-width: 480px) {
+    td.spark, th.spark { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media print { body { background: #fff; } .bar .tip { display: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Sales review &middot; Q3</p>
+    <p class="period">July&ndash;September</p>
+  </header>
+
+  <h1>Revenue reached $4.2M, up 18% on last quarter, and each month closed higher than the one before.</h1>
+
+  <section class="cols hero" aria-label="Headline numbers">
+    <div class="revenue">
+      <div>
+        <p class="eyebrow">Q3 revenue</p>
+        <p class="figure">$4.2M</p>
+        <p class="delta"><strong>+18%</strong> vs Q2 ($3.56M)</p>
+      </div>
+
+      <div class="chart" role="img" aria-label="Monthly revenue: July $1.2M, August $1.4M, September $1.6M. The Q2 monthly average was about $1.19M.">
+        <div class="plot">
+          <div class="bar" style="height:150px" tabindex="0">
+            <span class="val">$1.2M</span>
+            <span class="tip">July &middot; 29% of the quarter</span>
+          </div>
+          <div class="bar" style="height:175px" tabindex="0">
+            <span class="val">$1.4M</span>
+            <span class="tip">August &middot; +$200K, +17% on July</span>
+          </div>
+          <div class="bar last" style="height:200px" tabindex="0">
+            <span class="val">$1.6M</span>
+            <span class="tip">September &middot; +$200K, +14% on August</span>
+          </div>
+          <div class="ref"><span>Q2 monthly avg $1.19M</span></div>
+        </div>
+        <div class="months" aria-hidden="true"><span>Jul</span><span>Aug</span><span>Sep</span></div>
+      </div>
+    </div>
+
+    <dl class="metrics">
+      <div class="metric">
+        <dt>New customers</dt>
+        <dd>312</dd>
+      </div>
+      <div class="metric">
+        <dt>Churn</dt>
+        <dd>2.1%</dd>
+      </div>
+      <div class="metric">
+        <dt>Open pipeline<small>2.3&times; this quarter&rsquo;s revenue</small></dt>
+        <dd>$9.8M</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="cols lower">
+    <div class="section">
+      <p class="eyebrow">Top five reps</p>
+      <h2>Five reps closed $2.0M, just under half of the quarter.</h2>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Rep</th>
+            <th class="region">Region</th>
+            <th class="spark"></th>
+            <th class="num">Closed</th>
+            <th class="num">New <span class="long">customers</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="lead">
+            <td class="rank">1</td><td class="name">Priya Raman</td><td class="region">NA</td>
+            <td class="spark"><div class="meter" style="width:100%"></div></td>
+            <td class="num rev">$498K</td><td class="num cust">34</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td><td class="name">Marcus Oyelaran</td><td class="region">NA</td>
+            <td class="spark"><div class="meter" style="width:88.6%"></div></td>
+            <td class="num rev">$441K</td><td class="num cust">31</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td><td class="name">Sofie Lindqvist</td><td class="region">EMEA</td>
+            <td class="spark"><div class="meter" style="width:77.7%"></div></td>
+            <td class="num rev">$387K</td><td class="num cust">26</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td><td class="name">Daniel Achterberg</td><td class="region">NA</td>
+            <td class="spark"><div class="meter" style="width:70.7%"></div></td>
+            <td class="num rev">$352K</td><td class="num cust">27</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td><td class="name">Mei-Ling Tan</td><td class="region">APAC</td>
+            <td class="spark"><div class="meter" style="width:63.9%"></div></td>
+            <td class="num rev">$318K</td><td class="num cust">21</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <p class="eyebrow">Revenue by region</p>
+      <h2>North America brought in more than half.</h2>
+      <ul class="regions">
+        <li>
+          <div class="row"><span class="who">North America <small>$2.18M</small></span><span class="pct">52%</span></div>
+          <div class="track"><div class="fill" style="width:52%"></div></div>
+        </li>
+        <li>
+          <div class="row"><span class="who">EMEA <small>$1.30M</small></span><span class="pct">31%</span></div>
+          <div class="track"><div class="fill" style="width:31%"></div></div>
+        </li>
+        <li>
+          <div class="row"><span class="who">APAC <small>$0.71M</small></span><span class="pct">17%</span></div>
+          <div class="track"><div class="fill" style="width:17%"></div></div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <p>Q2 revenue and its monthly average are implied by the 18% growth figure. Regional dollar amounts are the stated shares applied to $4.2M. Rep names and figures are illustrative.</p>
+  </footer>
+
+</div>
+</body>
+</html>

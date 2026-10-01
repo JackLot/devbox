@@ -1,0 +1,39 @@
+{
+  "expectations": [
+    {
+      "text": "A single HTML file is saved in outputs",
+      "passed": true,
+      "evidence": "q3-sales-dashboard.html saved"
+    },
+    {
+      "text": "All given figures appear correctly ($4.2M, 18%, 312, 2.1%, $9.8M, 52/31/17, 1.2M/1.4M/1.6M)",
+      "passed": true,
+      "evidence": "All eleven figures found in the HTML"
+    },
+    {
+      "text": "The reply to the user is brief and does not narrate design passes or techniques",
+      "passed": true,
+      "evidence": "Reply summarizes the page and lists invented/derived figures; no walkthrough of passes or techniques (one line on the font fallback is a rendering caveat)"
+    },
+    {
+      "text": "No placeholder text or obviously fake names (lorem ipsum, John Doe)",
+      "passed": true,
+      "evidence": "Rep names are plausible (Priya Raman, Sofie Lindqvist...) and flagged as illustrative"
+    },
+    {
+      "text": "Chart or section titles state a finding rather than only a topic",
+      "passed": true,
+      "evidence": "Page headline and both section headings state findings, e.g. 'North America brought in more than half.'"
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "executor_duration_seconds": 117.3,
+    "total_duration_seconds": 117.3
+  }
+}

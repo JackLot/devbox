@@ -1,0 +1,11 @@
+{
+  "eval_id": 3,
+  "eval_name": "survey-report-pdf",
+  "prompt": "I need a one-page PDF report summarizing our customer survey: 1,240 responses, NPS 47 (was 39), top complaint is onboarding complexity (38% mention), top praise is support responsiveness (61%). Three recommendations: simplify setup wizard, add in-app guides, keep support staffing. It's going to the exec team.",
+  "assertions": [
+    "A PDF is saved in outputs and is exactly one page",
+    "All given figures appear correctly (1,240, NPS 47 from 39, 38%, 61%) and all three recommendations",
+    "The reply to the user is brief and does not narrate design passes or techniques",
+    "The headline states a finding rather than only a topic"
+  ]
+}
