@@ -82,7 +82,7 @@ header .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: w
 .counts span { white-space: nowrap; }
 .counts span:not(:last-child)::after { content: " ·"; }
 /* separates the Claude and agent runner cards from the devbox's own metrics */
-.divider { display: flex; align-items: center; gap: 12px; margin: 8px 0 -4px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.divider { display: flex; align-items: center; gap: 12px; margin: 16px 0 -4px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .divider::after { content: ""; flex: 1; height: 1px; background: var(--axis); }
 #claudeCard[hidden] + #runnerCard[hidden] + .divider { display: none; }
 .grid { display: grid; gap: 16px; }
