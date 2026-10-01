@@ -27,6 +27,7 @@ function openSessionLog(sid) {
   slog = { sid, offset: -1, busy: false };
   $("slog").innerHTML = "";
   $("slogNote").textContent = "Loading…";
+  $("slogStop").dataset.html = $("slogStop").innerHTML = "";
   slogHead();
   slogModal.showModal();
   fetchSessionLog();
@@ -40,6 +41,8 @@ function slogHead() {
   const where = home(s.cwd) + (s.branch ? " · " + s.branch : "");
   const html = sessionChip(s, Date.now() / 1000) + `<span class="mono" title="${esc(s.cwd || "")}">${esc(where)}</span>`;
   if ($("slogKicker").dataset.html !== html) { $("slogKicker").dataset.html = html; $("slogKicker").innerHTML = html; }
+  const stop = s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + sessionTitle(s) + "”");
+  if ($("slogStop").dataset.html !== stop) { $("slogStop").dataset.html = stop; $("slogStop").innerHTML = stop; }
 }
 bindModal(slogModal, () => { if (slog) clearInterval(slog.timer); slog = null; });
 
