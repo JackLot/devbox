@@ -38,7 +38,7 @@
     <div class="note" id="runnerIssuesNote" hidden></div>
     <div class="folds">
       <details class="fold" id="runnerRunsFold">
-        <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Recent runs<span id="runnerRunsNote"></span></h3></summary>
+        <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Recent runs</h3></summary>
         <div class="scroll" id="runnerRuns"></div>
       </details>
       <details class="fold" id="runnerLogFold">
@@ -93,8 +93,9 @@
     </details>
   </div>
   <footer class="m-foot" id="hibFoot" hidden>
-    <span class="note">Wake it again with <code>ssh devbox</code> or <code>devbox up</code>.</span>
-    <button class="btn primary" id="hibBtn" type="button">Hibernate now</button>
+    <span class="note" id="hibFootNote"></span>
+    <button class="btn" id="pauseBtn" type="button" hidden>Pause auto-hibernate</button>
+    <button class="btn primary" id="hibBtn" type="button" hidden>Hibernate now</button>
   </footer>
 </dialog>
 
