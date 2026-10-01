@@ -287,15 +287,19 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 .coderow .btn { flex: none; }
 /* rendered Markdown (run summaries) and other running text */
 .prose { font-size: 13.5px; line-height: 1.6; }
-.prose p, .prose ul, .prose pre { margin: 0 0 10px; }
+.prose p, .prose ul, .prose ol, .prose pre, .prose .scroll { margin: 0 0 10px; }
 .prose > :last-child { margin-bottom: 0; }
-.prose ul { padding-left: 20px; }
+.prose ul, .prose ol { padding-left: 20px; }
 .prose li + li { margin-top: 4px; }
 .prose h4 { font-size: 13.5px; font-weight: 650; margin: 14px 0 6px; }
 .prose > h4:first-child { margin-top: 0; }
 .prose code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--hover); padding: 1px 5px; border-radius: 4px; }
 .prose pre { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre; overflow-wrap: normal; }
 .prose a { color: var(--s1); }
+.prose hr { border: 0; border-top: 1px solid var(--grid); margin: 14px 0; }
+.prose table { border-collapse: collapse; font-size: 13px; }
+.prose th, .prose td { text-align: left; vertical-align: top; padding: 4px 12px 4px 0; border-bottom: 1px solid var(--grid); }
+.prose th { font-weight: 600; }
 .prose.plain { white-space: pre-wrap; color: var(--ink-2); }
 .box { max-height: 180px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); font-size: 13px; }
 /* a text box with its Copy button over the bottom right corner; the padding keeps the last line clear of it */
@@ -328,7 +332,8 @@ dialog.slog-modal { height: min(860px, calc(100vh - 32px)); }
 .slog .ev { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 0 10px; padding: 3px 20px; white-space: pre-wrap; word-break: break-word; }
 .slog .t { color: var(--muted); font-size: 11px; line-height: 1.7; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .slog .ev.user { margin: 10px 0 6px; padding: 8px 20px 8px 17px; border-left: 3px solid var(--s1); background: var(--hover); font-weight: 600; }
-.slog .ev.text .c { font: 13.5px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+/* replies are rendered Markdown, so their line breaks come from the markup */
+.slog .ev.text .c { font: 13.5px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; white-space: normal; }
 .slog .ev.tool { color: var(--ink-2); }
 .slog .tool b { font-weight: 600; color: var(--ink); }
 .slog .cmdline, .slog .res, .slog .think { color: var(--muted); }

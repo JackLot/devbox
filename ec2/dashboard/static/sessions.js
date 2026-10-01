@@ -77,12 +77,12 @@ function fold(text, lines, cls) {
   return `<details class="${cls}"><summary>${esc(all.slice(0, lines).join("\n"))}\n<span class="more">… ${all.length - lines} more lines</span></summary>${esc(all.slice(lines).join("\n"))}</details>`;
 }
 // One row per event: the time in a narrow left column, the content beside it.
-// Prompts stand out as a tinted band, replies read as prose, and tool calls
-// and their output stay monospace, with the output set off by a rule.
+// Prompts stand out as a tinted band, replies read as prose (rendered Markdown),
+// and tool calls and their output stay monospace, with the output set off by a rule.
 function logEvent(e) {
   const row = (cls, html, time = true) => `<div class="ev ${cls}"><span class="t">${time ? hms(e.t) : ""}</span><div class="c">${html}</div></div>`;
   if (e.kind === "user") return row("user", esc(e.text));
-  if (e.kind === "text") return row("text", esc(e.text));
+  if (e.kind === "text") return row("text", `<div class="prose">${md(e.text)}</div>`);
   if (e.kind === "tool") {
     const cmd = e.cmd && e.cmd !== e.text ? `<div class="cmdline">$ ${esc(e.cmd)}</div>` : "";
     return row("tool", `<b>${esc(e.tool)}</b> ${esc(e.text)}${cmd}`);
