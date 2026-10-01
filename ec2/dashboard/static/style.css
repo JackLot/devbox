@@ -78,6 +78,15 @@ header .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: w
 }
 .card h2 { font-size: 15px; font-weight: 600; margin: 0; }
 .card-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+/* info icon beside a card title; its .tip shows on hover or focus */
+.info { position: relative; display: inline-flex; vertical-align: -2px; margin-left: 6px; color: var(--muted); border-radius: 50%; cursor: help; }
+.info:hover, .info:focus-visible { color: var(--ink); outline: none; }
+.info .tip {
+  position: absolute; top: calc(100% + 6px); left: -8px; z-index: 3; display: none; width: max-content; max-width: min(280px, 70vw);
+  padding: 7px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  color: var(--ink-2); font-size: 12px; font-weight: 400; line-height: 1.4; white-space: normal; cursor: default;
+}
+.info:hover .tip, .info:focus .tip { display: block; }
 .counts { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
 .counts span { white-space: nowrap; }
 .counts span:not(:last-child)::after { content: " ·"; }
