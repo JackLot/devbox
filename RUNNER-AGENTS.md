@@ -36,6 +36,8 @@ Read this before starting; add to it when you learn something a future run would
   Write tool and run as `python3 /tmp/x.py`; then Read the file again before using Edit.
 - There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
   CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
+- The reviewer's phone is iOS Safari. In a column flexbox without a set height (the modals),
+  `flex: 1` there collapses the item to zero; use `flex: 1 1 auto` (issue #46).
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
   copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `static/util.js`).
   Inside a `showModal()` dialog the rest of the page is inert, so that fallback's textarea
