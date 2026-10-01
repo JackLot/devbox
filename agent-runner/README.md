@@ -147,3 +147,14 @@ so untracked secrets have to be injected per session (wrapper script or environm
 Running [`claude -p`](https://code.claude.com/docs/en/headless.md) locally reuses the checkouts
 that already have their secrets. Revisit routines if runs should be visible in claude.ai/code or
 triggered by GitHub events instead of polling.
+
+## To do
+
+- [ ] **Loosen how a PR is tied to its issue.** Today the only link is the branch name: a PR is
+  picked up only if its head branch is `agent/issue-N`, and N is read from that name
+  (`pr_triggers` in `agent-runner`). A PR you opened yourself on any other branch is ignored
+  even with the `agent` label and a linked issue (e.g. PR #25 on `runner-headless-browser` for
+  issue #31). Refactor so the issue can also be resolved from GitHub's own links (the PR's
+  `closingIssuesReferences`, i.e. "Closes #N" or the Development sidebar), and have the run
+  use the PR's actual head branch for the worktree and push rather than assuming
+  `agent/issue-N`. Decide what to do when a PR links no issue or several.
