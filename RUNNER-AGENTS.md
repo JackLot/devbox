@@ -27,7 +27,8 @@ Read this before starting; add to it when you learn something a future run would
   `removeAttribute` and `matches` too, and give `document` a `documentElement`. The sampled snapshot may have no `runner`
   issues, so to exercise the issue modal inject a fake `runner` (`issues`, `runs`, `home`)
   and call `openIssue("repo#N")`; `openMetric("cpu")`, `await openRun("<log name>")` and
-  `openSessionLog(sid)` + `await fetchSessionLog()` cover the other modals. One history row
+  `openSessionLog(sid)` + `await fetchSessionLog()` cover the other modals (the disk modal:
+  `await loadDiskUsage(false)` with the stub `fetch` returning a saved `/api/disk-usage` reply). One history row
   only gives "Collecting samples…", so fake a few `history.rows` to exercise the charts.
 - Issues may say "Use /design": no `design` skill is installed for runner sessions, so do the
   design work directly and say so in the decisions.

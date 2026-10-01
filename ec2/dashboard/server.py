@@ -121,6 +121,72 @@ def disks():
     return out
 
 
+# What takes up the disk: one `du` pass over the home directory, run only when
+# the disk modal asks for it (it reads every inode, far too slow for the
+# sampler) and kept for a minute so reopening the modal doesn't repeat it.
+
+HOME = pwd.getpwuid(os.getuid()).pw_dir
+DU_DEPTH = 3       # how far below HOME a directory is split into its entries
+DU_TOP = 30
+DU_TIMEOUT = 120
+DU_TTL = 60
+_du = {"lock": threading.Lock(), "result": None}
+
+
+def du_scan(root):
+    """Largest entries under root. Directories are split into their entries
+    down to DU_DEPTH, except git checkouts and worktrees, which stay whole: one
+    row per worktree says more than its node_modules and .git separately."""
+    r = subprocess.run(["nice", "-n", "19", "du", "-x", "-a", "-k", "-0", "--max-depth=%d" % DU_DEPTH, root],
+                       capture_output=True, timeout=DU_TIMEOUT)  # exits 1 on unreadable dirs; the rest still counts
+    sizes, children = {}, collections.defaultdict(list)
+    for rec in r.stdout.split(b"\0"):
+        kb, _, path = rec.decode(errors="replace").partition("\t")
+        if path and kb.isdigit():
+            sizes[path] = int(kb) * 1024
+            children[os.path.dirname(path)].append(path)
+    if root not in sizes:
+        raise RuntimeError((r.stderr.decode(errors="replace").strip().splitlines() or ["du printed nothing"])[-1][:200])
+    items, todo = [], [root]
+    while todo:
+        path = todo.pop()
+        git = os.path.join(path, ".git")
+        if path in children and not os.path.lexists(git):
+            todo.extend(children[path])
+            continue
+        kind = "file"
+        if os.path.isdir(path) and not os.path.islink(path):
+            kind = "worktree" if os.path.isfile(git) else "repo" if os.path.isdir(git) else "dir"
+        items.append({"path": path, "size": sizes[path], "kind": kind})
+    items.sort(key=lambda i: -i["size"])
+    return sizes[root], items[:DU_TOP]
+
+
+def disk_usage(refresh=False):
+    asked = time.time()
+    with _du["lock"]:  # one scan at a time; whoever waited gets its result
+        res = _du["result"]
+        if res and (res["time"] >= asked or (not refresh and asked - res["time"] < DU_TTL)):
+            return res
+        start = time.time()
+        res = {"root": HOME, "total": None, "items": [], "other": None, "error": None}
+        try:
+            res["total"], res["items"] = du_scan(HOME)
+        except subprocess.TimeoutExpired:
+            res["error"] = "du took longer than %d s" % DU_TIMEOUT
+        except Exception as e:
+            res["error"] = str(e) or repr(e)
+        # The rest of HOME's filesystem: system files, other users
+        mounts = [d for d in safe(disks) or [] if os.path.commonpath([HOME, d["mount"]]) == d["mount"]]
+        if mounts and res["total"] is not None:
+            d = max(mounts, key=lambda d: len(d["mount"]))
+            res["other"] = {"mount": d["mount"], "size": max(0, d["used"] - res["total"])}
+        res["time"] = time.time()
+        res["took"] = res["time"] - start
+        _du["result"] = res
+        return res
+
+
 def net_bytes():
     out = {}
     for line in read("/proc/net/dev").splitlines()[2:]:
@@ -1338,6 +1404,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(403, refused)
             d = safe(run_details, parse_qs(url.query).get("log", [""])[0])
             self.json(d) if d else self.send(404, b"no such run log\n", "text/plain")
+        elif url.path == "/api/disk-usage":
+            # Lists what's in the home directory, and a scan is heavy: same
+            # checks as /api/runner/run. Blocks until the scan is done.
+            refused = self.refuse_foreign(origin_required=False)
+            if refused:
+                return self.reply(403, refused)
+            self.json(disk_usage(refresh="refresh" in parse_qs(url.query)))
         elif url.path == "/api/session-log":
             # Transcripts hold code, prompts and command output: same checks
             # as /api/runner/run.
