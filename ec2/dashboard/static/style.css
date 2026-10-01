@@ -81,6 +81,10 @@ header .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: w
 .counts { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
 .counts span { white-space: nowrap; }
 .counts span:not(:last-child)::after { content: " ·"; }
+/* separates the Claude and agent runner cards from the devbox's own metrics */
+.divider { display: flex; align-items: center; gap: 12px; margin: 8px 0 -4px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.divider::after { content: ""; flex: 1; height: 1px; background: var(--axis); }
+#claudeCard[hidden] + #runnerCard[hidden] + .divider { display: none; }
 .grid { display: grid; gap: 16px; }
 .tiles { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px 28px; }
@@ -234,7 +238,7 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 .m-head h2 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 650; line-height: 1.3; letter-spacing: -.01em; margin: 0; overflow-wrap: anywhere; }
 .m-head h2 svg { flex: none; }
 .m-close {
-  flex: none; width: 30px; height: 30px; margin: -4px -6px 0 0; display: grid; place-items: center;
+  flex: none; width: 40px; height: 40px; margin: -8px -10px -4px 0; display: grid; place-items: center;
   border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer;
 }
 .m-close:hover, .m-close:focus-visible { background: var(--hover); color: var(--ink); outline: none; }
@@ -276,7 +280,6 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 /* a command or path with its Copy button */
 .coderow { display: flex; align-items: center; gap: 10px; padding: 7px 7px 7px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); }
 .coderow code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); }
-.coderow .br { display: inline-flex; align-items: center; gap: 3px; margin-left: 12px; color: var(--muted); }
 .coderow .btn { flex: none; }
 /* rendered Markdown (run summaries) and other running text */
 .prose { font-size: 13.5px; line-height: 1.6; }
@@ -290,9 +293,11 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 .prose pre { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; white-space: pre; overflow-wrap: normal; }
 .prose a { color: var(--s1); }
 .prose.plain { white-space: pre-wrap; color: var(--ink-2); }
-.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-.m-body .sec-head h3 { margin: 0; }
-.box { max-height: 132px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); font-size: 13px; }
+.box { max-height: 180px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); font-size: 13px; }
+/* a text box with its Copy button over the bottom right corner; the padding keeps the last line clear of it */
+.copybox { position: relative; }
+.copybox .box { padding-bottom: 40px; }
+.copybox .btn { position: absolute; right: 8px; bottom: 8px; }
 .callout {padding: 12px 14px; border-radius: 10px; border: 1px solid var(--warning); }
 
 /* auto-hibernate modal */
@@ -335,6 +340,13 @@ dialog.slog-modal { height: min(860px, calc(100vh - 32px)); }
 .state-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .state-row a { color: inherit; }
 .state-row .chip { font-size: 14px; }
+/* the title links to the issue: no underline, just the external-link icon after it */
+#issueModalTitle { display: block; }
+#issueModalTitle a { color: inherit; text-decoration: none; }
+#issueModalTitle a svg { margin-left: 4px; color: var(--muted); }
+#issueModalTitle a:hover svg, #issueModalTitle a:focus-visible svg { color: var(--s1); }
+.branch { display: flex; align-items: center; gap: 5px; margin: 8px 0 0 12px; color: var(--ink-2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.branch svg { flex: none; color: var(--muted); }
 
 /* phones */
 @media (max-width: 640px) {
@@ -357,7 +369,6 @@ dialog.slog-modal { height: min(860px, calc(100vh - 32px)); }
   .slog .ev { grid-template-columns: minmax(0, 1fr); padding-left: 14px; padding-right: 14px; }
   .slog .ev.user { padding-left: 11px; }
   .slog .t { display: none; }
-  /* worktree row: path, then branch, each on its own line */
+  /* worktree row: the path wraps instead of scrolling */
   .coderow code { white-space: normal; overflow-wrap: anywhere; }
-  .coderow .br { display: flex; margin: 2px 0 0; }
 }

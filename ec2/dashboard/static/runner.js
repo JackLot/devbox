@@ -98,7 +98,10 @@ function renderIssueModal(now) {
   if (!x) { if (issueModal.open) issueModal.close(); return; }
   const wt = x.worktree, run = x.last_run;
   $("issueKicker").textContent = issueKey(x);
-  $("issueModalTitle").textContent = x.title || issueKey(x);
+  // The title links out to the issue on GitHub
+  const title = esc(x.title || issueKey(x));
+  const head = x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener" title="Open the issue on GitHub">${title} ${EXT_ICON}</a>` : title;
+  if ($("issueModalTitle").dataset.html !== head) { $("issueModalTitle").dataset.html = head; $("issueModalTitle").innerHTML = head; }
   // Body, top to bottom: where the issue stands, when it last moved, where
   // its code is, and a prompt for picking it up by hand.
   const state = `<div class="state-row">${issueState(x)}${x.labels && x.labels.length ? `<div class="tags wrap">${x.labels.map(tag).join("")}</div>` : ""}</div>`;
@@ -107,11 +110,12 @@ function renderIssueModal(now) {
     wt && wt.activity && ["Last commit", dur(now - wt.activity) + " ago"],
     x.updated && ["Issue updated", clock(Date.parse(x.updated) / 1000)],
   ])}</dl>`;
-  const where = wt ? `<div><h3>Worktree</h3>${codeRow("cd " + wt.path,
-    esc(home(wt.path)) + (wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""), "Copy: cd " + wt.path)}</div>` : "";
+  const where = wt ? `<div><h3>Worktree</h3>${codeRow("cd " + wt.path, esc(home(wt.path)), "Copy: cd " + wt.path)}` +
+    (wt.branch ? `<div class="branch">${BRANCH_ICON}<span>${esc(wt.branch)}</span></div>` : "") + "</div>" : "";
   const prompt = handoffPrompt(x);
-  const handoff = `<div><div class="sec-head"><h3>Handoff prompt</h3><button type="button" class="btn small" data-copy="${esc(prompt)}" title="Copy the prompt, then paste it into a Claude Code session">Copy</button></div>
-    <div class="prose plain box">${esc(prompt)}</div></div>`;
+  // The Copy button sits over the prompt's bottom right corner
+  const handoff = `<div><h3>Handoff prompt</h3><div class="copybox"><div class="prose plain box">${esc(prompt)}</div>
+    <button type="button" class="btn small" data-copy="${esc(prompt)}" title="Copy the prompt, then paste it into a Claude Code session">Copy</button></div></div>`;
   const html = state + facts + where + handoff;
   // The actions sit in the foot: the run's details, then out to GitHub.
   const foot = [
