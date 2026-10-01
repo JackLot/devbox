@@ -9,22 +9,35 @@ Read this before starting; add to it when you learn something a future run would
   refused, and so is `curl`. You can start a server in the foreground briefly to check that it
   boots, but you can't keep it up or fetch its pages.
 - Bash commands containing a shell expansion (`$(...)`, `$VAR`) are refused ("Contains
-  simple_expansion"), even inside a quoted heredoc. That bites `index.html` edits, where the JS
+  simple_expansion"), even inside a quoted heredoc. That bites dashboard JS edits, where the code
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
   `sed -i` chained with `&&` is refused too ("requires approval"); edit docs with the Edit tool.
-- To syntax-check the dashboard JS without a browser, pull out the `<script>` body with Python
-  and run `node --check` on it. To catch runtime errors too, `eval` that script in `node -e`
-  with stubbed `document`/`localStorage`/`fetch`/`setInterval` and call `render()` on a
-  snapshot saved from `server.Sampler().get()` (sample twice, a second apart). Write that
+- The dashboard is `index.html` (markup only) plus `static/style.css` and `static/*.js`: classic
+  scripts sharing globals, loaded in the order `index.html` lists them. The reviewer asked for
+  this split (issue #4); don't fold it back into one file. A new file there needs a `<script>`
+  tag; `server.py` and `install.sh` pick up any `static/*.css|js` on their own.
+- To syntax-check the dashboard JS without a browser, run `node --check` on each `static/*.js`
+  (from a `python3 -c` subprocess loop; a shell `for` loop is refused). To catch runtime errors
+  too, concatenate the scripts in `index.html` order and run them with `vm.runInContext`
+  with stubbed `document`/`localStorage`/`fetch`/`setInterval`, then call `render()` on a
+  snapshot saved from a `server.Sampler()` (call `.sample()` twice, a second apart, then
+  `.get()`; `.get()` alone returns `{}`). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
-  make the stub element's `querySelector` return an object, or `spark()` throws; stub
-  `removeAttribute` too (the theme code calls it). The sampled snapshot may have no `runner`
+  make the stub element's `querySelector` return an object, or `spark()` and `bindModal()` throw; stub
+  `removeAttribute` and `matches` too. The sampled snapshot may have no `runner`
   issues, so to exercise the issue modal inject a fake `runner` (`issues`, `runs`, `home`)
-  and call `openIssue("repo#N")`.
+  and call `openIssue("repo#N")`; `openMetric("cpu")`, `await openRun("<log name>")` and
+  `openSessionLog(sid)` + `await fetchSessionLog()` cover the other modals. One history row
+  only gives "Collecting samples…", so fake a few `history.rows` to exercise the charts.
+- Issues may say "Use /design": no `design` skill is installed for runner sessions, so do the
+  design work directly and say so in the decisions.
+- For large rewrites of a dashboard file (a whole section of `style.css`, say), Write the new
+  block to `/tmp` and splice it in with a small Python script that is also written with the
+  Write tool and run as `python3 /tmp/x.py`; then Read the file again before using Edit.
 - There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
   CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
-  copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `index.html`).
+  copy-to-clipboard needs the `execCommand("copy")` fallback (`copyText` in `static/util.js`).
   Inside a `showModal()` dialog the rest of the page is inert, so that fallback's textarea
   must be appended inside the dialog (pass it as `copyText`'s `host`), or nothing gets copied.
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.

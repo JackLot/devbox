@@ -46,6 +46,10 @@ PYTHON=/usr/bin/python3
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 install -d -m 755 "$LIB"
 install -m 644 "$here/server.py" "$here/index.html" "$LIB/"
+# The page's CSS and JS; start clean so a file removed from the repo doesn't linger
+rm -rf "$LIB/static"
+install -d -m 755 "$LIB/static"
+install -m 644 "$here"/static/*.css "$here"/static/*.js "$LIB/static/"
 
 cat > "$UNIT" <<EOF
 [Unit]

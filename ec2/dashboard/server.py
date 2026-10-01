@@ -1231,6 +1231,15 @@ def hibernate(instance, dry_run=False):
 
 # ---- http ---------------------------------------------------------------------
 
+STATIC_FILE = re.compile(r"^[a-z][a-z0-9_-]*\.(css|js)\Z")
+STATIC_TYPES = {"css": "text/css; charset=utf-8", "js": "text/javascript; charset=utf-8"}
+
+
+def read_static(name):
+    with open(os.path.join(HERE, "static", name), "rb") as f:
+        return f.read()
+
+
 class Handler(BaseHTTPRequestHandler):
     sampler = None
 
@@ -1253,6 +1262,14 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 self.send(200, f.read(), "text/html; charset=utf-8")
+        elif url.path.startswith("/static/"):
+            # The page's CSS and JS: a flat directory, names matched whole, so
+            # nothing outside it can be asked for.
+            m = STATIC_FILE.match(url.path[len("/static/"):])
+            body = m and safe(read_static, m.group(0))
+            if body is None:
+                return self.send(404, b"not found\n", "text/plain")
+            self.send(200, body, STATIC_TYPES[m.group(1)])
         elif url.path == "/api/stats":
             self.json(self.sampler.get())
         elif url.path == "/api/log":
