@@ -17,7 +17,10 @@ Read this before starting; add to it when you learn something a future run would
   with stubbed `document`/`localStorage`/`fetch`/`setInterval` and call `render()` on a
   snapshot saved from `server.Sampler().get()` (sample twice, a second apart). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
-  make the stub element's `querySelector` return an object, or `spark()` throws.
+  make the stub element's `querySelector` return an object, or `spark()` throws; stub
+  `removeAttribute` too (the theme code calls it). The sampled snapshot may have no `runner`
+  issues, so to exercise the issue modal inject a fake `runner` (`issues`, `runs`, `home`)
+  and call `openIssue("repo#N")`.
 - There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
   CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;

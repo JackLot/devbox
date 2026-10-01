@@ -1001,8 +1001,27 @@ function renderIssueModal(now) {
   ].filter(Boolean);
   // Worktree and branch on one line under the title, like the table's worktree cell
   const where = wt ? `<div><button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc("Click to copy: cd " + wt.path)}">${esc(home(wt.path))}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button></div>` : "";
-  $("issueBody").innerHTML = where + `<div class="links">${links}</div>` +
+  const prompt = handoffPrompt(x);
+  const handoff = `<div class="handoff"><h3>Handoff prompt<button type="button" class="theme copy-btn" data-copy="${esc(prompt)}" title="Copy the prompt, then paste it into a Claude Code session">Copy</button></h3>
+    <div class="md">${esc(prompt)}</div></div>`;
+  const html = where + `<div class="links">${links}</div>` + handoff +
     `<dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  // Only re-render on change, so a poll doesn't drop a text selection or cut the "Copied" flash short
+  if ($("issueBody").dataset.html !== html) { $("issueBody").dataset.html = html; $("issueBody").innerHTML = html; }
+}
+// For picking an issue up by hand in Claude Code after the runner's first pass.
+function handoffPrompt(x) {
+  const wt = x.worktree;
+  const about = [
+    `We're working on issue ${issueKey(x)}${x.title ? ` ("${x.title}")` : ""}${x.url ? ": " + x.url : ""}`,
+    wt && `Its worktree is ${home(wt.path)}${wt.branch ? `, on branch ${wt.branch}` : ""}; cd there if you aren't already in it.`,
+    x.pr && `The agent runner already opened PR #${x.pr.number} for it: ${x.pr.url}`,
+  ].filter(Boolean).join("\n");
+  return about + "\n\nGet oriented first: read the issue and all of its comments, " +
+    (x.pr ? "the PR's description and review comments, " : "any linked PRs, ") +
+    "and the commits on this branch (git log / git diff against main), plus RUNNER-AGENTS.md and CLAUDE.md if present. " +
+    "Use gh for GitHub. Don't change anything yet: give me a short summary of where things stand, " +
+    "then we'll work together on further changes for this issue.";
 }
 issueModal.addEventListener("close", () => { issueOpen = null; });
 $("issueClose").onclick = () => issueModal.close();
