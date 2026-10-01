@@ -57,6 +57,10 @@ Read this before starting; add to it when you learn something a future run would
   unstaged edits. Check this even when the newest comment asks for nothing new: a re-run with
   no new requests can mean they saved tweaks after your last push (compare entry timestamps
   with the last commit time).
+- To test `agent-runner/agent-runner` without touching GitHub: `bash -n` it from a `python3`
+  subprocess; run `--dry-run` with `AGENT_RUNNER_HOME` set to a `/tmp` dir whose `repos` lists
+  `/home/dev/devbox`; and put a fake `gh` (a script that serves JSON fixtures through `jq`
+  and `exec`s the real one otherwise) first on `PATH` to fake labels or reviews.
 - Scripts that `ec2/bootstrap.sh` installs (`devbox-idle-check`, `devbox-idle`) are heredocs in
   it and need root paths. To test one, pull the heredoc out with a Python regex, replace the
   `/var/lib/...`, `/var/log/...` and `/etc/devbox/...` paths with a temp dir and `logger` with
