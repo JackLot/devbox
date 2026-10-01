@@ -52,7 +52,8 @@ The agent reports its outcome through `--json-schema` structured output (`status
 edit the "Making decisions" section of the prompt in `agent-runner`.
 
 PR descriptions and comments are written for skimming. Above the fold: a sentence or two on
-what the change does, then **Audit**, the steps to check it by hand. Below a rule, in
+what the change does, then **Audit**, the steps to check it by hand, and (rarely) anything
+else the reviewer must know to review it properly. Below a rule, in
 stripped-down language: **Code changes**, **Agent-run verification** and **Agent decisions**.
 The layout and wording rules are the "Writing ..." section of the prompt.
 

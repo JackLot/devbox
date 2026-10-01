@@ -59,10 +59,6 @@ Read this before starting; add to it when you learn something a future run would
   with the last commit time).
 ## Letting the reviewer check your change
 
-- The reviewer finds runner PR descriptions and comments far too wordy (issue #42). Follow the
-  prompt's layout: a sentence or two, `### Audit`, the `<br />` + `<hr />` fold, then
-  `### Code changes` and `### Agent-run verification` in terse fragments. Nothing else above
-  the fold.
 - For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. Under
   `### Audit`, give a single copy-paste command that runs the dashboard from your worktree on
   port 9998, next to the real one on 9999:

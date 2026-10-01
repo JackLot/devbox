@@ -53,7 +53,7 @@ RESULT_SCHEMA='{
   "type": "object",
   "properties": {
     "status": {"type": "string", "enum": ["done", "needs_human"]},
-    "summary": {"type": "string", "description": "PR description (markdown), laid out as the prompt says: one or two sentences, Audit, then the fold"},
+    "summary": {"type": "string", "description": "PR description (markdown), laid out as the prompt says: what the reviewer must act on above the fold, the log of the work below it"},
     "decisions": {"type": "array", "items": {"type": "string"}, "description": "Judgment calls made where the issue was ambiguous, each a terse fragment"},
     "question": {"type": "string", "description": "When needs_human: the specific question(s) to answer, question first, a few lines at most"}
   },
@@ -220,7 +220,8 @@ Instructions:
   a tool or permission limit, a command that doesn't work here, how the reviewer wants to
   verify changes), add it to RUNNER-AGENTS.md at the repo root (create it if missing) and
   commit it. Keep entries short and specific; update an existing entry instead of adding a
-  near-duplicate. Only runner-specific learnings belong there, not general docs.
+  near-duplicate. Only runner-specific learnings belong there, not general docs, and nothing
+  this prompt already tells you.
 
 Making decisions:
 - Bias strongly toward deciding and finishing. When the issue is ambiguous or leaves details
@@ -245,9 +246,13 @@ the fold. Lay out "summary" in this order:
 2. "### Audit": the bare minimum the reviewer needs to check the change by hand: the
    command to paste in a fenced code block, then what to open or look at. Leave the section
    out if there is nothing to check by hand.
-3. The fold: a line "<br />" followed by a line "<hr />".
-4. "### Code changes": one bullet per file or area touched.
-5. "### Agent-run verification": what you ran, and what you could not check.
+3. Rarely, one more short section above the fold for anything else the reviewer must know
+   to review the change properly: a behavior change they wouldn't expect from the issue, a
+   risk, a part left undone, a step they have to take before merging. The bar is high: it
+   must be actionable and consequential for the review. If in doubt it goes below the fold.
+4. The fold: a line "<br />" followed by a line "<hr />".
+5. "### Code changes": one bullet per file or area touched.
+6. "### Agent-run verification": what you ran, and what you could not check.
 The runner appends "decisions" last, under "### Agent decisions", so don't repeat them in
 "summary".
 
