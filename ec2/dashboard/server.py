@@ -1173,13 +1173,18 @@ def allowed_host(host, instance_name):
 
 
 def stop_process(pid, start):
-    if pid <= 1 or pid == os.getpid():
+    if pid <= 1:
         return 403, "refusing to stop that process"
     p = safe(read_proc, str(pid))
     if not p or start_ticks(p) != start:
         return 409, "process already exited (or its pid was reused)"
     if p["user"] != ME:
         return 403, "owned by %s; the dashboard runs as %s" % (p["user"], ME)
+    if pid == os.getpid():
+        # Stopping this dashboard: answer the request first, then exit.
+        print("stopping the dashboard itself (pid %d) via dashboard" % pid, flush=True)
+        threading.Timer(0.5, os.kill, (pid, signal.SIGTERM)).start()
+        return 200, "stopping the dashboard (pid %d)" % pid
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError as e:

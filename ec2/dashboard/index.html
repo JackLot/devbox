@@ -586,10 +586,10 @@ function meterRow(label, used, total, extra) {
 }
 
 // Stop buttons: only for processes the dashboard's own user owns (the server
-// can't signal anyone else's), never for the dashboard itself.
+// can't signal anyone else's), including the dashboard itself.
 function stopButton(pid, start, user, label) {
   const h = last && last.host;
-  if (!h || start == null || user !== h.user || pid === h.pid) return "";
+  if (!h || start == null || user !== h.user) return "";
   return `<button type="button" class="stop" data-pid="${pid}" data-start="${start}" data-label="${esc(label)}" title="Stop pid ${pid} (SIGTERM)">Stop</button>`;
 }
 
@@ -597,7 +597,9 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("button.stop");
   if (!b) return;
   const label = b.dataset.label.length > 140 ? b.dataset.label.slice(0, 140) + "…" : b.dataset.label;
-  if (!confirm(`Stop ${label}?\n\nSends SIGTERM to pid ${b.dataset.pid}.`)) return;
+  const isDashboard = last && last.host && Number(b.dataset.pid) === last.host.pid;
+  const note = isDashboard ? "\n\nThis is the dashboard serving this page; it stops updating until the server is started again." : "";
+  if (!confirm(`Stop ${label}?\n\nSends SIGTERM to pid ${b.dataset.pid}.${note}`)) return;
   b.disabled = true;
   try {
     const r = await fetch("api/stop", {
