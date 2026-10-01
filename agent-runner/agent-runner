@@ -53,9 +53,9 @@ RESULT_SCHEMA='{
   "type": "object",
   "properties": {
     "status": {"type": "string", "enum": ["done", "needs_human"]},
-    "summary": {"type": "string", "description": "What changed and how it was verified (markdown)"},
-    "decisions": {"type": "array", "items": {"type": "string"}, "description": "Judgment calls made where the issue was ambiguous"},
-    "question": {"type": "string", "description": "When needs_human: what is blocked and the specific question(s) to answer"}
+    "summary": {"type": "string", "description": "PR description (markdown), laid out as the prompt says: one or two sentences, Audit, then the fold"},
+    "decisions": {"type": "array", "items": {"type": "string"}, "description": "Judgment calls made where the issue was ambiguous, each a terse fragment"},
+    "question": {"type": "string", "description": "When needs_human: the specific question(s) to answer, question first, a few lines at most"}
   },
   "required": ["status", "summary"]
 }'
@@ -189,7 +189,8 @@ process_issue() {
 This branch already has earlier work on this issue (see git log). Continue from it; newer
 issue comments may answer questions from a previous run or ask for changes. If the newest
 comments ask a question or ask for something other than code changes, answer them in
-\"summary\" (it is posted as your reply); no commit is needed in that case."
+\"summary\" (it is posted as your reply); no commit is needed in that case. For a follow-up
+that does change code, \"summary\" covers only what this run changed, not the whole PR."
 
   # Define the prompt passed to the implementing agent (a heredoc, so quotes need no escaping)
   local prompt
@@ -235,6 +236,32 @@ Making decisions:
 - If you return needs_human, commit any useful progress first, and put specific,
   answerable questions in "question" (with your recommended answer where you have one).
 
+Writing "summary", "decisions" and "question":
+The reviewer reads these on GitHub, busy and distracted, and reads the diff themselves.
+Write for skimming: what they have to act on comes first, your log of the work goes below
+the fold. Lay out "summary" in this order:
+1. One or two sentences saying what the change does. No heading, and no "Closes #N" line
+   (the runner adds it).
+2. "### Audit": the bare minimum the reviewer needs to check the change by hand: the
+   command to paste in a fenced code block, then what to open or look at. Leave the section
+   out if there is nothing to check by hand.
+3. The fold: a line "<br />" followed by a line "<hr />".
+4. "### Code changes": one bullet per file or area touched.
+5. "### Agent-run verification": what you ran, and what you could not check.
+The runner appends "decisions" last, under "### Agent decisions", so don't repeat them in
+"summary".
+
+- Below the fold and in "decisions", write stripped-down fragments, dropping articles and
+  filler where the meaning survives: "Link opens new tab, hardcoded to <url>", not "The link
+  opens in a new tab so that the live dashboard stays open".
+- Don't explain what anyone who knows the technology already knows, and don't justify a
+  decision unless the reason is surprising.
+- Say each thing once, and scale to the change: a one-line fix gets a sentence above the
+  fold and a line or two below it.
+- "question", and a "summary" that only answers a comment, are posted as issue comments:
+  put the question or the answer in the first line, then only the context needed to act on
+  it. No sections.
+
 Your final response must match the output schema: "summary" becomes the PR description.
 EOF
 )
@@ -257,7 +284,8 @@ EOF
   decisions=$(jq -r '.structured_output.decisions // [] | map("- " + .) | join("\n")' "$logfile" 2>/dev/null || true)
   question=$(jq -r '.structured_output.question // empty' "$logfile" 2>/dev/null || true)
   [[ -n "$decisions" ]] && decisions="
-**Decisions made** (push back on the PR if any are wrong):
+### Agent decisions
+*push back on the PR if any are wrong*
 $decisions"
 
   # Appended to failure comments: a command the reviewer can paste to land in the worktree
@@ -327,7 +355,7 @@ $decisions" 2>&1) || failed=true
     else
       verb=Opened
       out=$(gh pr create -R "$repo" --base "$base" --head "$branch" --title "$title" \
-        --body "Closes #$number
+        --body "Closes #$number.
 
 $summary
 $decisions" 2>&1) || failed=true

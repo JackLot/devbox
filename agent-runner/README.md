@@ -41,7 +41,7 @@ it and commit it with their change, so it gets reviewed in the PR. See
 
 The prompt tells the agent to bias hard toward deciding: when the issue is ambiguous about
 details (naming, copy, layout, approach, edge cases) it picks what fits the existing code,
-finishes, and lists its judgment calls under **Decisions made** in the PR so they get reviewed
+finishes, and lists its judgment calls under **Agent decisions** in the PR so they get reviewed
 there. It returns `needs_human` only as a last resort: the goal is too unclear for any
 implementation to be likely right, it needs access or setup it doesn't have, or it faces an
 irreversible or high-risk choice (data deletion, breaking public APIs, security, billing) the
@@ -50,6 +50,11 @@ issue doesn't settle. It commits progress before stopping, and the question land
 The agent reports its outcome through `--json-schema` structured output (`status`, `summary`,
 `decisions`, `question`), so the script doesn't parse free text. To tune how readily it blocks,
 edit the "Making decisions" section of the prompt in `agent-runner`.
+
+PR descriptions and comments are written for skimming. Above the fold: a sentence or two on
+what the change does, then **Audit**, the steps to check it by hand. Below a rule, in
+stripped-down language: **Code changes**, **Agent-run verification** and **Agent decisions**.
+The layout and wording rules are the "Writing ..." section of the prompt.
 
 ## How a run works
 
