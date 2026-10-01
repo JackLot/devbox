@@ -200,7 +200,7 @@ async function openRun(name) {
     (!d.size ? '<div class="note">The log is written when the run ends.</div>' : "") +
     (d.question ? `<div class="callout"><h3>Question for you</h3><div class="prose">${md(d.question)}</div></div>` : "") +
     (d.summary ? section("Summary", `<div class="prose">${md(d.summary)}</div>`) : "") +
-    (d.decisions.length ? section("Decisions", `<div class="prose"><ul>${d.decisions.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>`) : "") +
+    (d.decisions.length ? section("Decisions", `<div class="prose"><ul>${d.decisions.map(t => `<li>${mdInline(t)}</li>`).join("")}</ul></div>`) : "") +
     (d.result ? section("Result", `<div class="prose">${md(d.result)}</div>`) : "") +
     (d.denials.length ? section(`Permission denials (${d.denials.length})`, `<div class="prose"><ul>${d.denials.map(p => `<li><b>${esc(p.tool)}</b> ${esc(p.detail)}</li>`).join("")}</ul></div>`) : "") +
     (resume ? section("Resume this session", codeRow(resume, esc(resume), "Copy the resume command")) : "") +
@@ -231,9 +231,6 @@ function renderRunner(d) {
   $("runnerCard").hidden = !r;
   if (!r) return;
   const now = Date.now() / 1000, cur = r.current;
-  const n = st => r.runs.filter(x => x.status === st).length;
-  $("runnerRunsNote").textContent = [["done", "done"], ["needs_human", "need you"], ["failed", "failed"], ["interrupted", "interrupted"]]
-    .map(([st, word]) => n(st) && ` · ${n(st)} ${word}`).filter(Boolean).join("");
 
   // The "now" strip only shows while a run is going; idle is the quiet default.
   $("runnerNow").hidden = !(cur || r.running);

@@ -30,19 +30,31 @@ const foldSection = (title, html, attrs = "") =>
 const codeRow = (copy, shown, title) =>
   `<div class="coderow"><code>${shown}</code><button type="button" class="btn small" data-copy="${esc(copy)}" title="${esc(title || "Copy")}">Copy</button></div>`;
 
-// Minimal Markdown for the summaries agents write (they become PR descriptions).
-// Everything is escaped first; only headings, lists, code, bold and http(s)
+// Minimal Markdown for what agents write: run summaries (they become PR
+// descriptions) and the replies in a session's log. Everything is escaped
+// first; only headings, lists, tables, rules, code, bold, italics and http(s)
 // links are then marked up, so the text can't inject markup of its own.
-function md(src) {
-  const inline = s => esc(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
+// Inline markup; code spans are split off first so nothing inside them is touched.
+const mdInline = s => esc(s).split(/(`[^`]+`)/).map((part, i) => i % 2
+  ? `<code>${part.slice(1, -1)}</code>`
+  : part
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  let out = "", para = [], list = [], code = null;
+    .replace(/(^|[^*\w])\*([^*\s](?:[^*]*[^*\s])?)\*(?![*\w])/g, "$1<i>$2</i>")).join("");
+function md(src) {
+  const inline = mdInline;
+  const cells = line => line.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+  const isSep = line => cells(line).every(c => /^:?-+:?$/.test(c));
+  let out = "", para = [], list = [], ordered = false, table = [], code = null;
   const flush = () => {
     if (para.length) out += `<p>${para.map(inline).join("<br>")}</p>`;
-    if (list.length) out += `<ul>${list.map(i => `<li>${inline(i)}</li>`).join("")}</ul>`;
-    para = []; list = [];
+    if (list.length) out += `<${ordered ? "ol" : "ul"}>${list.map(i => `<li>${inline(i)}</li>`).join("")}</${ordered ? "ol" : "ul"}>`;
+    // A table needs its |---| line under the header; without one the rows are just text
+    if (table.length >= 2 && isSep(table[1])) {
+      const tr = (line, tag) => `<tr>${cells(line).map(c => `<${tag}>${inline(c)}</${tag}>`).join("")}</tr>`;
+      out += `<div class="scroll"><table><thead>${tr(table[0], "th")}</thead><tbody>${table.slice(2).map(l => tr(l, "td")).join("")}</tbody></table></div>`;
+    } else if (table.length) out += `<p>${table.map(inline).join("<br>")}</p>`;
+    para = []; list = []; table = [];
   };
   for (const line of String(src || "").split("\n")) {
     let m;
@@ -51,10 +63,17 @@ function md(src) {
       else code.push(line);
     } else if (/^\s*```/.test(line)) { flush(); code = []; }
     else if ((m = /^#{1,6}\s+(.*)$/.exec(line))) { flush(); out += `<h4>${inline(m[1])}</h4>`; }
-    else if ((m = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(line))) { if (para.length) flush(); list.push(m[1]); }
+    else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flush(); out += "<hr>"; }
+    else if (/^\s*\|.*\|\s*$/.test(line)) { if (!table.length) flush(); table.push(line); }
+    else if ((m = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(line))) {
+      const num = /\d/.test(m[1]);
+      if (para.length || table.length || (list.length && num !== ordered && !/^\s/.test(line))) flush();
+      if (!list.length) ordered = num;
+      list.push(m[2]);
+    }
     else if (!line.trim()) flush();
     else if (list.length && /^\s/.test(line)) list[list.length - 1] += " " + line.trim();
-    else { if (list.length) flush(); para.push(line); }
+    else { if (list.length || table.length) flush(); para.push(line); }
   }
   if (code !== null) out += `<pre>${esc(code.join("\n"))}</pre>`;
   flush();
