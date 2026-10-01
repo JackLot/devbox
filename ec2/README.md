@@ -46,7 +46,7 @@ Close the remote window (or quit Cursor) when you are done. If the laptop sleeps
 | [`iam/laptop-policy.json`](iam/laptop-policy.json) | `DevboxOperator` permission set: the laptop's everyday access (start/stop/describe the devbox, SSM sessions) |
 | [`iam/admin-no-launch-policy.json`](iam/admin-no-launch-policy.json) | Deny added to `AdministratorAccess` after launch, so new instances can't be launched until it is deliberately lifted |
 | [`laptop/devbox`](laptop/devbox) | `devbox up / down / stop / status / ssm / proxy` |
-| [`dashboard/`](dashboard/) | `server.py` (stdlib, reads `/proc`) + `index.html`; `install.sh` sets it up as a service |
+| [`dashboard/`](dashboard/) | `server.py` (stdlib, reads `/proc`) + `index.html` + its CSS and JS in `static/`; `install.sh` sets it up as a service |
 | [`laptop/ssh_config`](laptop/ssh_config) | `Host devbox` block with the wake-on-SSH ProxyCommand |
 
 On the instance, the bootstrap installs:
