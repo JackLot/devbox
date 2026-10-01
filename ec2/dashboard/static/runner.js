@@ -22,8 +22,11 @@ const ISSUE_STATE = {
   wip: ["busy", "Working"], queued: ["queued", "Queued"], needs_human: ["waiting", "Needs you"],
   failed: ["stopped", "Failed"], pr: ["good", "PR to review"], closed: ["idle", "Closed"],
 };
-function issueChip(state) {
-  const [dot, label] = ISSUE_STATE[state] || ["idle", "No agent label"];
+// What queued an issue when it wasn't the label on the issue itself
+const QUEUED_BY = { label: "Queued by PR label", review: "Queued by code review" };
+const stateLabel = x => (x.state === "queued" && QUEUED_BY[x.queued_by]) || (ISSUE_STATE[x.state] || [0, "No agent label"])[1];
+function issueChip(x) {
+  const dot = (ISSUE_STATE[x.state] || ["idle"])[0], label = stateLabel(x);
   return `<span class="chip"><span class="dot ${dot}" aria-hidden="true"></span>${esc(label)}</span>`;
 }
 const tag = l => {
@@ -45,7 +48,7 @@ function issueState(x) {
   if (x.state === "pr" && x.pr) {
     return `<span class="chip"><span class="dot good" aria-hidden="true"></span><span>${prLink(x.pr)} to review</span></span>`;
   }
-  return issueChip(x.state) + (x.pr ? " " + prLink(x.pr) : "");
+  return issueChip(x) + (x.pr ? " " + prLink(x.pr) : "");
 }
 
 // The dashboard's sandbox keeps home read-only, so it can't start a run itself;
@@ -69,7 +72,7 @@ function renderIssues(r, now) {
   // One line per issue: state, title, PR and when it last ran. A row opens the
   // issue modal, which has the rest (labels, worktree, branch, links, last run).
   $("runnerIssues").innerHTML = rows.length ? `<div class="rows">${rows.map(x => {
-      const [dot, label] = ISSUE_STATE[x.state] || ["idle", "No agent label"];
+      const dot = (ISSUE_STATE[x.state] || ["idle"])[0], label = stateLabel(x);
       const state = x.state === "pr" && x.pr ? `${prLink(x.pr)} to review` : esc(label) + (x.pr ? " · " + prLink(x.pr) : "");
       const run = x.last_run;
       return `<div class="irow" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog" title="${esc(x.title || "")}">

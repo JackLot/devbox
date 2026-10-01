@@ -764,13 +764,34 @@ def github_state(conf):
             issues = gh_json(["issue", "list", "-R", slug, "--state", "open", "--limit", "200",
                               "--json", "number,title,url,labels,updatedAt"], conf["path"])
             prs = gh_json(["pr", "list", "-R", slug, "--state", "open", "--limit", "100",
-                           "--json", "number,url,isDraft,headRefName"], conf["path"])
+                           "--json", "number,url,isDraft,headRefName,labels,reviews"], conf["path"])
         except Exception as e:
             out["error"] = "%s: %s" % (slug, e)
             continue
-        out["repos"][name] = {"issues": issues,
-                              "prs": {p["headRefName"]: p for p in prs if p["headRefName"].startswith("agent/issue-")}}
+        seen = set((safe(read, os.path.join(RUNNER_HOME, "reviews-seen")) or "").splitlines())
+        agent_prs = {}
+        for p in prs:
+            if p["headRefName"].startswith("agent/issue-"):
+                p["trigger"] = pr_trigger(slug, p, seen)
+                del p["labels"], p["reviews"]
+                agent_prs[p["headRefName"]] = p
+        out["repos"][name] = {"issues": issues, "prs": agent_prs}
     return out
+
+
+def pr_trigger(slug, pr, seen):
+    """Why the runner's next tick will pick this PR's issue up, if it will: the
+    trigger label on the PR or a code review no run has been given yet (the same
+    rules as pr_triggers in agent-runner)."""
+    if any(lb.get("name") == "agent" for lb in pr.get("labels") or []):
+        return "label"
+    for r in pr.get("reviews") or []:
+        if (r.get("authorAssociation") in ("OWNER", "MEMBER", "COLLABORATOR")
+                and (r.get("state") in ("COMMENTED", "CHANGES_REQUESTED")
+                     or (r.get("state") == "APPROVED" and r.get("body")))
+                and "%s#%d %s" % (slug, pr["number"], r.get("id")) not in seen):
+            return "review"
+    return None
 
 
 def session_title(session_id):
@@ -856,12 +877,17 @@ def open_issues(conf, github, worktrees, last_run):
             names = {lb["name"] for lb in labels}
             state = next((st for lb, st in AGENT_LABELS if lb in names), None)
             key = (name, i["number"])
+            pr = data["prs"].get("agent/issue-%d" % i["number"])
+            # Queued from the PR (its label or a new code review) rather than the issue
+            queued_by = pr and pr.get("trigger")
+            if queued_by and state != "wip":
+                state = "queued"
             if not state and key not in wt_by:
                 continue
             seen.add(key)
             rows.append({"repo": name, "issue": i["number"], "title": i.get("title"), "url": i.get("url"),
-                         "labels": labels, "state": state, "updated": i.get("updatedAt"),
-                         "pr": data["prs"].get("agent/issue-%d" % i["number"])})
+                         "labels": labels, "state": state, "updated": i.get("updatedAt"), "pr": pr,
+                         "queued_by": queued_by if state == "queued" else None})
     for w in worktrees:
         key = (w["repo"], w["issue"])
         if key in seen:
@@ -870,7 +896,7 @@ def open_issues(conf, github, worktrees, last_run):
         # tick), or GitHub couldn't be reached for this repo.
         rows.append({"repo": w["repo"], "issue": w["issue"], "title": w["title"], "url": w["url"],
                      "labels": None, "state": "closed" if w["repo"] in github["repos"] else None,
-                     "updated": None, "pr": None})
+                     "updated": None, "pr": None, "queued_by": None})
     order = {st: n for n, (_, st) in enumerate(AGENT_LABELS)}
     rows.sort(key=lambda r: r["updated"] or "", reverse=True)
     rows.sort(key=lambda r: order.get(r["state"], len(order)))
