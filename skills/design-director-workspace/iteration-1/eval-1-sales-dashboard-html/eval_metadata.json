@@ -1,0 +1,12 @@
+{
+  "eval_id": 1,
+  "eval_name": "sales-dashboard-html",
+  "prompt": "Create a sales dashboard as a single HTML page for our Q3 numbers. Revenue was $4.2M (up 18% QoQ), 312 new customers, churn 2.1%, pipeline $9.8M. Break revenue down by region (NA 52%, EMEA 31%, APAC 17%) and show the monthly trend Jul/Aug/Sep: 1.2M, 1.4M, 1.6M. Top 5 reps table too, make up plausible names.",
+  "assertions": [
+    "A single HTML file is saved in outputs",
+    "All given figures appear correctly ($4.2M, 18%, 312, 2.1%, $9.8M, 52/31/17, 1.2M/1.4M/1.6M)",
+    "The reply to the user is brief and does not narrate design passes or techniques",
+    "No placeholder text or obviously fake names (lorem ipsum, John Doe)",
+    "Chart or section titles state a finding rather than only a topic"
+  ]
+}

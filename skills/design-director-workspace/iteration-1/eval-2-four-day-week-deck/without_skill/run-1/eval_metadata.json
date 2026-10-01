@@ -1,0 +1,12 @@
+{
+  "eval_id": 2,
+  "eval_name": "four-day-week-deck",
+  "prompt": "Make a presentation deck (6-8 slides) pitching our leadership team on moving the support team to a 4-day week pilot. Key points: burnout scores up 30% this year, two competitors already do it, proposed 3-month pilot with 12 people, success measured by CSAT and ticket resolution time, cost is basically zero.",
+  "assertions": [
+    "A single self-contained HTML deck with 6-8 slides is saved in outputs",
+    "All five key points from the request are covered",
+    "The reply to the user is brief and does not narrate design passes or techniques",
+    "Not every slide is a title plus bullet list (at least two distinct slide layouts)",
+    "Slide titles are takeaway sentences rather than topic labels"
+  ]
+}

@@ -1,0 +1,313 @@
+{
+  "metadata": {
+    "skill_name": "design-director",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-10-01T17:16:55Z",
+    "evals_run": [
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 117.3,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A single HTML file is saved in outputs",
+          "passed": true,
+          "evidence": "q3-sales-dashboard.html saved"
+        },
+        {
+          "text": "All given figures appear correctly ($4.2M, 18%, 312, 2.1%, $9.8M, 52/31/17, 1.2M/1.4M/1.6M)",
+          "passed": true,
+          "evidence": "All eleven figures found in the HTML"
+        },
+        {
+          "text": "The reply to the user is brief and does not narrate design passes or techniques",
+          "passed": true,
+          "evidence": "Reply summarizes the page and lists invented/derived figures; no walkthrough of passes or techniques (one line on the font fallback is a rendering caveat)"
+        },
+        {
+          "text": "No placeholder text or obviously fake names (lorem ipsum, John Doe)",
+          "passed": true,
+          "evidence": "Rep names are plausible (Priya Raman, Sofie Lindqvist...) and flagged as illustrative"
+        },
+        {
+          "text": "Chart or section titles state a finding rather than only a topic",
+          "passed": true,
+          "evidence": "Page headline and both section headings state findings, e.g. 'North America brought in more than half.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 157.7,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A single self-contained HTML deck with 6-8 slides is saved in outputs",
+          "passed": true,
+          "evidence": "Single HTML file, 7 slides"
+        },
+        {
+          "text": "All five key points from the request are covered",
+          "passed": true,
+          "evidence": "Burnout, competitors, pilot scope, CSAT and resolution time, and cost each have a slide"
+        },
+        {
+          "text": "The reply to the user is brief and does not narrate design passes or techniques",
+          "passed": true,
+          "evidence": "Reply gives the slide order and assumptions to check; no design narration"
+        },
+        {
+          "text": "Not every slide is a title plus bullet list (at least two distinct slide layouts)",
+          "passed": true,
+          "evidence": "Slides vary: big-number slide with comparison bars, statement slides; only 3 list items in the whole deck"
+        },
+        {
+          "text": "Slide titles are takeaway sentences rather than topic labels",
+          "passed": true,
+          "evidence": "Titles are sentences, e.g. 'Two numbers decide it, and customers set both.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 138.3,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A PDF is saved in outputs and is exactly one page",
+          "passed": true,
+          "evidence": "customer-survey-summary.pdf saved; PDF page tree reports one page"
+        },
+        {
+          "text": "All given figures appear correctly (1,240, NPS 47 from 39, 38%, 61%) and all three recommendations",
+          "passed": true,
+          "evidence": "1,240, 47, 39, 61%, 38% and all three recommendations visible in the preview"
+        },
+        {
+          "text": "The reply to the user is brief and does not narrate design passes or techniques",
+          "passed": true,
+          "evidence": "Reply summarizes content and flags the headline and added wording; no design narration"
+        },
+        {
+          "text": "The headline states a finding rather than only a topic",
+          "passed": true,
+          "evidence": "Headline: 'Customers like us more than they did. Getting started still holds us back.'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 50.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A single HTML file is saved in outputs",
+          "passed": true,
+          "evidence": "q3-sales-dashboard.html saved"
+        },
+        {
+          "text": "All given figures appear correctly ($4.2M, 18%, 312, 2.1%, $9.8M, 52/31/17, 1.2M/1.4M/1.6M)",
+          "passed": true,
+          "evidence": "All eleven figures found in the HTML"
+        },
+        {
+          "text": "The reply to the user is brief and does not narrate design passes or techniques",
+          "passed": true,
+          "evidence": "Reply lists the four parts and the added figures; no design narration"
+        },
+        {
+          "text": "No placeholder text or obviously fake names (lorem ipsum, John Doe)",
+          "passed": true,
+          "evidence": "Plausible names, labelled sample data"
+        },
+        {
+          "text": "Chart or section titles state a finding rather than only a topic",
+          "passed": true,
+          "evidence": "Panel titles are topics ('Monthly revenue', 'Top 5 reps') but subtitles state findings ('North America is just over half of the quarter'); page title is the topic 'Q3 Sales Dashboard'. Borderline pass."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 70.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A single self-contained HTML deck with 6-8 slides is saved in outputs",
+          "passed": true,
+          "evidence": "Single HTML file, 7 slides"
+        },
+        {
+          "text": "All five key points from the request are covered",
+          "passed": true,
+          "evidence": "All five key points have a slide"
+        },
+        {
+          "text": "The reply to the user is brief and does not narrate design passes or techniques",
+          "passed": true,
+          "evidence": "Reply gives the slide order and assumptions to check; no design narration"
+        },
+        {
+          "text": "Not every slide is a title plus bullet list (at least two distinct slide layouts)",
+          "passed": true,
+          "evidence": "No bullet lists at all; cover uses a Mon-Fri tile motif, other slides use charts and cards"
+        },
+        {
+          "text": "Slide titles are takeaway sentences rather than topic labels",
+          "passed": true,
+          "evidence": "Titles are sentences, e.g. 'The pilot costs basically nothing to run'"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 49.6,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A PDF is saved in outputs and is exactly one page",
+          "passed": true,
+          "evidence": "customer-survey-summary.pdf saved; PDF page tree reports one page"
+        },
+        {
+          "text": "All given figures appear correctly (1,240, NPS 47 from 39, 38%, 61%) and all three recommendations",
+          "passed": true,
+          "evidence": "1,240, 47, 39, 61%, 38% and all three recommendations visible in the preview"
+        },
+        {
+          "text": "The reply to the user is brief and does not narrate design passes or techniques",
+          "passed": true,
+          "evidence": "Reply summarizes content and flags the headline and rationales; no design narration"
+        },
+        {
+          "text": "The headline states a finding rather than only a topic",
+          "passed": true,
+          "evidence": "Headline: 'Customer sentiment is up 8 points. Onboarding is what stands between us and the next gain.'"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 137.7667,
+        "stddev": 20.2053,
+        "min": 117.3,
+        "max": 157.7
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 56.5333,
+        "stddev": 11.6642,
+        "min": 49.6,
+        "max": 70.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "+81.2",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}
