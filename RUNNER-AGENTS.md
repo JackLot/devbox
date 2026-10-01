@@ -24,7 +24,7 @@ Read this before starting; add to it when you learn something a future run would
   `.get()`; `.get()` alone returns `{}`). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
   make the stub element's `querySelector` return an object, or `spark()` and `bindModal()` throw; stub
-  `removeAttribute` and `matches` too. The sampled snapshot may have no `runner`
+  `removeAttribute` and `matches` too, and give `document` a `documentElement`. The sampled snapshot may have no `runner`
   issues, so to exercise the issue modal inject a fake `runner` (`issues`, `runs`, `home`)
   and call `openIssue("repo#N")`; `openMetric("cpu")`, `await openRun("<log name>")` and
   `openSessionLog(sid)` + `await fetchSessionLog()` cover the other modals. One history row
@@ -61,6 +61,12 @@ Read this before starting; add to it when you learn something a future run would
   subprocess; run `--dry-run` with `AGENT_RUNNER_HOME` set to a `/tmp` dir whose `repos` lists
   `/home/dev/devbox`; and put a fake `gh` (a script that serves JSON fixtures through `jq`
   and `exec`s the real one otherwise) first on `PATH` to fake labels or reviews.
+- Scripts that `ec2/bootstrap.sh` installs (`devbox-idle-check`, `devbox-idle`) are heredocs in
+  it and need root paths. To test one, pull the heredoc out with a Python regex, replace the
+  `/var/lib/...`, `/var/log/...` and `/etc/devbox/...` paths with a temp dir and `logger` with
+  `true`, write it out and run it (`bash -n <file>` works from a `python3` subprocess). Changes
+  there only reach the box when the reviewer re-runs `bootstrap.sh` over SSM (and
+  `dashboard/install.sh` for the service unit); say so in the summary.
 
 ## Letting the reviewer check your change
 

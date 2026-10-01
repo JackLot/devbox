@@ -463,7 +463,7 @@ sudo sed -i 's/^IDLE_MINUTES=.*/IDLE_MINUTES=60/' /etc/devbox/idle.conf
 | Never hibernates | `/var/log/devbox-idle.log` (or the dashboard) names what keeps it active |
 | Tries to hibernate, fails | `journalctl -u devbox-idle.service`: `UnauthorizedOperation` means the role policy or `Name` tag is wrong; `UnsupportedHibernationConfiguration` means the instance was launched without hibernation (relaunch) |
 | Resume came back as a fresh boot | `sudo journalctl -u hibinit-agent -b -1`; if zram is implicated, remove the zram section from `bootstrap.sh`, delete `/etc/systemd/zram-generator.conf`, reboot, re-test |
-| Need it to stay up regardless | set `IDLE_HIBERNATE=off` in `/etc/devbox/idle.conf` |
+| Need it to stay up regardless | `devbox-idle pause` (or **Pause auto-hibernate** in the dashboard), `devbox-idle resume` when done; to turn it off for good, set `IDLE_HIBERNATE=off` in `/etc/devbox/idle.conf` |
 | Nothing resolves on the box (`gh`, git, dnf fail; SSM shows `TargetNotConnected`) | Tailscale DNS took over `/etc/resolv.conf` (boxes bootstrapped before `--accept-dns=false`). SSM needs DNS too, so first restore DNS remotely: Tailscale admin > DNS > add Cloudflare as a global nameserver + **Override DNS servers**. Then `devbox ssm` (a `devbox stop` + `devbox up` restarts a backed-off SSM agent) and run `sudo tailscale set --accept-dns=false; sudo ln -sfn /run/systemd/resolve/resolv.conf /etc/resolv.conf; sudo systemctl restart tailscaled systemd-resolved`. `grep nameserver /etc/resolv.conf` must show only `172.31.0.2`; then turn the override off |
 | Locked out of SSH entirely | `devbox ssm` always works: it needs no inbound port or Tailscale |
 

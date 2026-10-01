@@ -1,5 +1,5 @@
 // Auto-hibernate: the pill in the page header and its modal (countdown, a few
-// facts, the idle checker's log, and Hibernate now).
+// facts, the idle checker's log, pause/resume and Hibernate now).
 
 const hibModal = $("hibModal");
 bindModal(hibModal);
@@ -13,10 +13,15 @@ function renderIdle(d) {
   const now = Date.now() / 1000;
   let status, hero, sub, pill;
   if (!idle.enabled) {
-    status = ICON.off + " Paused";
+    status = ICON.off + " Off";
     hero = "Off";
     sub = "IDLE_HIBERNATE=off in /etc/devbox/idle.conf";
     pill = ICON.off + " Auto-hibernate off";
+  } else if (idle.paused) {
+    status = ICON.warning + " Paused";
+    hero = "Paused";
+    sub = "the box stays up until you resume auto-hibernate";
+    pill = ICON.warning + " Auto-hibernate paused";
   } else if (idle.count > 0) {
     status = ICON.warning + ` Idle, check ${idle.count} of ${idle.needed}`;
     hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
@@ -32,11 +37,11 @@ function renderIdle(d) {
   const steps = Array.from({ length: idle.needed }, (_, i) => `<span class="${i < idle.count ? "on" : ""}"></span>`).join("");
   // A pill in the header; the modal has the countdown, facts, log and Hibernate now.
   if ($("hibCard").dataset.html !== pill) { $("hibCard").dataset.html = pill; $("hibCard").innerHTML = pill; }
-  $("hibCard").title = "Auto-hibernate: show details, the idle log and Hibernate now";
+  $("hibCard").title = "Auto-hibernate: show details, the idle log, pause and Hibernate now";
   $("hibModalTitle").innerHTML = status;
   $("hibHero").textContent = hero;
   // The idle-check countdown ticks live (tickLive); everything else is per-minute.
-  $("hibSub").innerHTML = esc(sub) + (idle.enabled ? ' · <span class="liveNext"></span>' : "");
+  $("hibSub").innerHTML = esc(sub) + (idle.enabled && !idle.paused ? ' · <span class="liveNext"></span>' : "");
   $("hibSteps").innerHTML = steps;
 
   const awake = idle.awake_since_estimate || host.boot_time;
@@ -47,10 +52,41 @@ function renderIdle(d) {
     ["Hibernates after", null, `${idle.idle_minutes} min idle <span class="dim">load under ${idle.load_busy.toFixed(2)}, now ${d.cpu.load[0].toFixed(2)}</span>`],
     ["Claude heartbeat", null, '<span id="liveBeat"></span>'],
   ]);
-  // Hibernate now: only on an EC2 devbox (idle checker + instance metadata present)
-  $("hibFoot").hidden = !(host.instance && host.instance.instance_id);
+  // Hibernate now: only on an EC2 devbox (idle checker + instance metadata present).
+  // Pause: not while idle.conf has it off anyway, and only with a checker that looks for the flag.
+  const ec2 = !!(host.instance && host.instance.instance_id);
+  const pauseBtn = $("pauseBtn");
+  $("hibBtn").hidden = !ec2;
+  pauseBtn.hidden = !idle.enabled;
+  if (!pauseBtn.dataset.busy) {
+    pauseBtn.disabled = !idle.pause_supported && !idle.paused;
+    pauseBtn.textContent = idle.paused ? "Resume auto-hibernate" : "Pause auto-hibernate";
+  }
+  $("hibFoot").hidden = !ec2 && !idle.enabled;
+  const note = idle.enabled && !idle.pause_supported
+    ? "Pausing needs the updated idle checker: re-run <code>bootstrap.sh</code> over SSM."
+    : ec2 ? "Wake it again with <code>ssh devbox</code> or <code>devbox up</code>." : "";
+  if ($("hibFootNote").dataset.html !== note) { $("hibFootNote").dataset.html = note; $("hibFootNote").innerHTML = note; }
   tickLive();
 }
+
+// Pause or resume auto-hibernate: the server sets the flag devbox-idle-check looks for.
+$("pauseBtn").onclick = async () => {
+  const btn = $("pauseBtn"), paused = !(last && last.idle && last.idle.paused);
+  btn.dataset.busy = "1"; btn.disabled = true;
+  try {
+    const r = await fetch("api/idle-pause", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Dashboard": "1" },
+      body: JSON.stringify({ paused }),
+    });
+    const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
+    if (!r.ok) throw new Error(res.message);
+  } catch (err) {
+    alert(`Couldn't ${paused ? "pause" : "resume"} auto-hibernate: ${err.message}`);
+  }
+  delete btn.dataset.busy;
+  await poll(); pollLog();
+};
 
 $("hibBtn").onclick = async () => {
   const sessions = (last && last.claude) || [];
@@ -95,7 +131,7 @@ async function pollLog() {
       const i = l.indexOf(" "), ts = l.slice(0, i), msg = l.slice(i + 1);
       const t = Date.parse(ts);
       const shown = isNaN(t) ? esc(ts) : new Date(t).toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-      const cls = /hibernating|disabled/.test(msg) ? ' class="hi"' : "";
+      const cls = /hibernating|disabled|paused|resumed/.test(msg) ? ' class="hi"' : "";
       return `<span class="t">${shown}</span>  <span${cls}>${esc(msg)}</span>`;
     }).join("\n");
     $("logNote").textContent = d.path + " · newest last";
