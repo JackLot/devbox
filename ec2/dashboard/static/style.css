@@ -85,6 +85,10 @@ header .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: w
 .divider { display: flex; align-items: center; gap: 12px; margin: 16px 0 -4px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .divider::after { content: ""; flex: 1; height: 1px; background: var(--axis); }
 #claudeCard[hidden] + #runnerCard[hidden] + .divider { display: none; }
+/* link back to the repo, under the last card */
+.credit { margin-top: 8px; text-align: center; font-size: 12px; }
+.credit a { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; }
+.credit a:hover, .credit a:focus-visible { color: var(--ink); text-decoration: underline; }
 .grid { display: grid; gap: 16px; }
 .tiles { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px 28px; }
