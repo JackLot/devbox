@@ -8,20 +8,20 @@
 <style>
 :root {
   color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
+  --page: #f6f6f3;
+  --surface: #ffffff;
   --ink: #0b0b0b;
   --ink-2: #52514e;
   --muted: #898781;
-  --grid: #e1e0d9;
+  --grid: #ecebe6;
   --axis: #c3c2b7;
-  --border: rgba(11,11,11,0.10);
-  --s1: #2a78d6;      /* series 1: blue */
-  --s2: #eb6834;      /* series 2: orange */
-  --track: #cde2fb;   /* meter track: light step of the blue ramp */
+  --border: rgba(11,11,11,0.08);
+  --hover: rgba(11,11,11,0.04);
+  --shadow: 0 1px 2px rgba(11,11,11,0.04);
+  --s1: #2a78d6;      /* accent and chart series */
+  --track: #dfebfa;   /* meter track: light step of the blue ramp */
   --good: #0ca30c;
   --warning: #fab219;
-  --serious: #ec835a;
   --critical: #d03b3b;
   --good-ink: #006300;
 }
@@ -29,99 +29,195 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --page: #0d0d0d;
-    --surface: #1a1a19;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --grid: #2c2c2a;
+    --surface: #171716;
+    --ink: #f4f4f2;
+    --ink-2: #b9b8ae;
+    --grid: #262624;
     --axis: #383835;
-    --border: rgba(255,255,255,0.10);
-    --s1: #3987e5;
-    --s2: #d95926;
-    --track: #184f95;
+    --border: rgba(255,255,255,0.09);
+    --hover: rgba(255,255,255,0.05);
+    --shadow: none;
+    --s1: #4b93ea;
+    --track: #1b3556;
     --good-ink: #0ca30c;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0d0d0d;
-  --surface: #1a1a19;
-  --ink: #ffffff;
-  --ink-2: #c3c2b7;
-  --grid: #2c2c2a;
+  --surface: #171716;
+  --ink: #f4f4f2;
+  --ink-2: #b9b8ae;
+  --grid: #262624;
   --axis: #383835;
-  --border: rgba(255,255,255,0.10);
-  --s1: #3987e5;
-  --s2: #d95926;
-  --track: #184f95;
+  --border: rgba(255,255,255,0.09);
+  --hover: rgba(255,255,255,0.05);
+  --shadow: none;
+  --s1: #4b93ea;
+  --track: #1b3556;
   --good-ink: #0ca30c;
 }
 * { box-sizing: border-box; }
+/* Flex and grid rules below would otherwise un-hide [hidden] elements. */
+[hidden] { display: none !important; }
 body {
   margin: 0; background: var(--page); color: var(--ink);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;
 }
-main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 16px; }
-header h1 { font-size: 20px; margin: 0; font-weight: 600; }
-header .meta { color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 16px; }
-header .meta b { font-weight: 500; color: var(--ink); }
-/* Narrow screens: buttons stay top-right beside the name, metadata wraps below. */
-@media (max-width: 760px) {
-  header { align-items: center; }
-  header h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; }
-  header .actions { order: 1; }
-  header .meta { order: 2; flex-basis: 100%; }
-}
+main { max-width: 960px; margin: 0 auto; padding: 28px 20px 64px; display: grid; gap: 16px; }
+main > * { min-width: 0; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+header .id { flex: 1; min-width: 0; }
+header h1 { font-size: 22px; line-height: 1.25; margin: 0; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+header .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 0 12px; }
 .stale { color: var(--critical); font-weight: 500; }
+.actions { display: flex; gap: 8px; align-items: center; flex: none; }
+.pill, .theme {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 15px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); box-shadow: var(--shadow);
+  font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.pill { color: var(--ink); }
+.pill svg { flex: none; }
+.pill:hover, .pill:focus-visible, .theme:hover, .theme:focus-visible { border-color: var(--s1); color: var(--ink); outline: none; }
 .card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-  padding: 16px; min-width: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px 20px; min-width: 0; box-shadow: var(--shadow);
 }
-.card h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--ink-2); }
-.grid { display: grid; gap: 12px; }
-.tiles { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 12px 0; }
-.two { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.card h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.card-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.counts { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+.counts span { white-space: nowrap; }
+.counts span:not(:last-child)::after { content: " ·"; }
+.grid { display: grid; gap: 16px; }
+.tiles { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.two { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px 28px; }
 @media (max-width: 480px) { .two { grid-template-columns: 1fr; } }
-
-/* hibernation */
-.hib { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr); gap: 20px; }
-@media (max-width: 760px) { .hib { grid-template-columns: 1fr; } }
-.hero { font-size: 44px; font-weight: 600; line-height: 1.1; margin: 4px 0 2px; }
-.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
-.status svg { flex: none; }
-.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--grid); }
-.facts dt { color: var(--ink-2); }
-.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
-.steps { display: flex; gap: 2px; margin-top: 10px; max-width: 280px; }
-.steps span { flex: 1; height: 8px; background: var(--track); }
-.steps span:first-child { border-radius: 4px 0 0 4px; }
-.steps span:last-child { border-radius: 0 4px 4px 0; }
-.steps span.on { background: var(--s1); }
-.log {
-  margin: 0; height: 240px; overflow: auto; padding: 10px 12px; border-radius: 8px;
-  background: var(--page); border: 1px solid var(--border);
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all;
-}
-.log .t { color: var(--muted); }
-.log .hi { font-weight: 600; }
 .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
-.hib-tile { cursor: pointer; transition: border-color .15s; }
-.hib-tile:hover, .hib-tile:focus-visible { border-color: var(--s1); outline: none; }
-.hib-tile .label { display: flex; justify-content: space-between; gap: 8px; }
-.hib-tile .more { color: var(--muted); font-weight: 400; font-size: 12px; opacity: 0; transition: opacity .15s; }
-.hib-tile:hover .more, .hib-tile:focus-visible .more { opacity: 1; }
-@media (hover: none) { .hib-tile .more { opacity: 1; } }
-.hib-tile .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hib-tile .status { font-size: 12px; font-weight: 500; color: var(--ink); }
-/* Same gap under the label as the big value leaves on the other tiles. */
-#hibTileS { margin-top: 8px; }
-.hib-tile .steps { max-width: none; margin: 6px 0; }
-.hib-foot { display: flex; align-items: center; gap: 8px; }
-.hib-foot .sub { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hib-foot .hib-btn { flex: none; }
+.note-inline { color: var(--muted); font-weight: 400; font-size: 12px; }
+.dim { color: var(--muted); }
+.banner { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
+
+/* status dots */
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+.dot.busy { background: var(--s1); animation: pulse 1.4s ease-in-out infinite; }
+.dot.waiting { background: var(--warning); }
+.dot.idle { background: var(--axis); }
+.dot.stopped { background: var(--critical); }
+.dot.good { background: var(--good); }
+.dot.queued { background: none; border: 2px solid var(--s1); }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; white-space: nowrap; flex: none; }
+
+/* row lists: Claude sessions and runner issues */
+.rows { display: grid; gap: 2px; margin: 0 -8px; }
+.rows > * { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; min-width: 0; }
+.rows > [role="button"] { cursor: pointer; }
+.rows > [role="button"]:hover, .rows > [role="button"]:focus-visible { background: var(--hover); outline: none; }
+.rows .body { flex: 1; min-width: 0; }
+.rows .ttl { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .d { color: var(--ink-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .d b { font-weight: 500; color: var(--ink); }
+.rows .where { color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; flex: 0 1 auto; max-width: 34%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rows .age { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; min-width: 4ch; text-align: right; }
+.rows .ref { color: var(--muted); font-weight: 400; }
+.rows .side { flex: none; display: flex; align-items: baseline; gap: 12px; color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.rows .side a { color: inherit; }
+.stop {
+  font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink-2); background: none;
+  border: 1px solid var(--border); border-radius: 5px; padding: 0 7px; line-height: 20px; cursor: pointer; flex: none;
+}
+.stop:hover, .stop:focus-visible { color: var(--critical); border-color: var(--critical); outline: none; }
+.stop:disabled { opacity: .5; cursor: default; }
+/* Stop stays out of the way until its row is hovered; opacity keeps the width fixed */
+.rows .stop, .tbl .stop { opacity: 0; }
+.rows > :hover .stop, .tbl tr:hover .stop, .stop:focus-visible { opacity: 1; }
+@media (hover: none) { .rows .stop, .tbl .stop { opacity: 1; } }
+.open-log:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+
+/* agent runner */
+.runner-next { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#runnerStart { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+.runner-now { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; padding: 8px 12px; margin-bottom: 8px; border-radius: 8px; background: var(--page); }
+.runner-now .sep { color: var(--muted); }
+.runner-now a { color: inherit; white-space: nowrap; }
+.runner-now .ttl { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runner-now .d { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.runner-now .dim { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.folds { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--grid); display: grid; gap: 4px; }
+.folds > * { min-width: 0; }
+.runner h3, .run-body h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0; }
+.runner .tbl a { color: inherit; }
+.runner .tbl .chip { font-size: 12px; }
+.runner .log { height: 200px; margin-top: 6px; }
+details.fold > summary { list-style: none; cursor: pointer; display: inline-block; }
+details.fold > summary > * { display: flex; align-items: center; gap: 6px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary svg { transition: transform .15s; color: var(--muted); }
+details.fold[open] > summary svg { transform: rotate(90deg); }
+details.fold > summary:hover h3 { color: var(--ink-2); }
+details.fold.card[open] > summary { margin-bottom: 10px; }
+.runs tbody tr { cursor: pointer; }
+.runs tbody tr:hover, .runs tbody tr:focus-visible { background: var(--hover); outline: none; }
+
+/* click-to-copy */
+.copy {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); background: none; border: 0;
+  padding: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; text-align: left;
+  display: inline-flex; align-items: center;
+}
+.copy .br { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; color: var(--muted); }
+.copy .br svg { flex: none; }
+.copy:hover, .copy:focus-visible { color: var(--ink); text-decoration: underline; outline: none; }
+.copy.done { color: var(--good-ink); text-decoration: none; }
+/* Copy icon fades in on hover so it's clear a click copies; opacity keeps the width fixed */
+.copy .cp { display: inline-flex; margin-left: 6px; color: var(--muted); opacity: 0; transition: opacity .1s; }
+.copy:hover .cp, .copy:focus-visible .cp { opacity: 1; }
+.copy-btn { height: auto; font-size: 11px; padding: 0 8px; margin-left: 8px; line-height: 18px; vertical-align: 1px; box-shadow: none; }
+.tags { display: flex; gap: 4px; }
+.tags.wrap { flex-wrap: wrap; }
+.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
+.tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* system tiles */
+.tile .label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.tile .value { font-size: 28px; font-weight: 650; letter-spacing: -.02em; line-height: 1.2; margin: 2px 0; font-variant-numeric: tabular-nums; }
+.tile .sub { color: var(--muted); font-size: 12px; min-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spark { position: relative; margin-top: 10px; }
+.spark svg { display: block; width: 100%; height: 48px; overflow: visible; }
+.tip {
+  position: absolute; top: -6px; transform: translate(-50%, -100%); pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 7px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  font-variant-numeric: tabular-nums; display: none; z-index: 2;
+}
+.meter { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; margin: 5px 0 2px; }
+.meter > i { display: block; height: 100%; border-radius: 3px; background: var(--s1); }
+.meter > i.warn { background: var(--warning); }
+.meter > i.crit { background: var(--critical); }
+.mrow { margin-top: 10px; }
+.mrow .l { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mrow .l b { color: var(--ink-2); font-weight: 500; }
+
+/* tables */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+.tbl td { padding: 6px; border-bottom: 1px solid var(--grid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl tr.open { cursor: pointer; }
+.tbl tr.open:hover td { background: var(--hover); }
+.tbl tr.open a { color: inherit; font-weight: 550; text-decoration: none; }
+.tbl tr.open:hover a, .tbl tr.open a:focus-visible { text-decoration: underline; }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ink-2); }
+.bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--s1); vertical-align: middle; margin-right: 6px; }
+.scroll { overflow-x: auto; }
+
+/* modals */
 dialog.modal {
   width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px;
-  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 14px;
   box-shadow: 0 12px 40px rgba(0,0,0,.25);
 }
 dialog.modal::backdrop { background: rgba(0,0,0,.4); }
@@ -130,13 +226,37 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 dialog.modal, dialog.modal .log { overscroll-behavior: contain; }
 @supports (height: 100dvh) { dialog.modal { max-height: calc(100dvh - 32px); } dialog.modal .slog { height: min(70dvh, 700px); } }
 .modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.modal-head h2 { font-size: 16px; margin: 0; color: var(--ink); }
-.modal-head .theme { margin-left: auto; }
+.modal-head h2 { font-size: 16px; font-weight: 600; margin: 0; color: var(--ink); }
+.modal-head .theme { margin-left: auto; flex: none; }
 .modal-head h2.clip { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log {
+  margin: 0; height: 240px; overflow: auto; padding: 10px 12px; border-radius: 8px;
+  background: var(--page); border: 1px solid var(--border);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all;
+}
+.log .t { color: var(--muted); }
+.log .hi { font-weight: 600; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--grid); }
+.facts dt { color: var(--ink-2); }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* auto-hibernate modal */
+.hib { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr); gap: 20px; }
+@media (max-width: 760px) { .hib { grid-template-columns: 1fr; } }
+.hib h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 6px; }
+.hero { font-size: 44px; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; margin: 4px 0 2px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.status svg { flex: none; }
+.steps { display: flex; gap: 2px; margin-top: 10px; max-width: 280px; }
+.steps span { flex: 1; height: 6px; background: var(--track); }
+.steps span:first-child { border-radius: 3px 0 0 3px; }
+.steps span:last-child { border-radius: 0 3px 3px 0; }
+.steps span.on { background: var(--s1); }
+.hib-btn { margin-top: 16px; background: var(--s1); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.hib-btn:hover { filter: brightness(1.1); }
+.hib-btn:disabled { opacity: .6; cursor: default; }
+
 /* session live log */
-.open-log { cursor: pointer; }
-.sess.open-log:hover .ttl, .sess.open-log:focus-visible .ttl { color: var(--s1); }
-.open-log:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
 .slog { height: min(70vh, 700px); }
 .slog .ev { margin: 0 0 8px; }
 .slog .user { color: var(--s1); font-weight: 600; }
@@ -149,204 +269,25 @@ dialog.modal, dialog.modal .log { overscroll-behavior: contain; }
 .slog details[open] > summary .more { display: none; }
 .slog .more { color: var(--s1); }
 
-/* tiles */
-.tile .label { color: var(--ink-2); font-size: 13px; font-weight: 500; }
-.tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
-.tile .sub { color: var(--ink-2); font-size: 12px; min-height: 18px; }
-.spark { position: relative; margin-top: 8px; }
-.spark svg { display: block; width: 100%; height: 56px; overflow: visible; }
-.tip {
-  position: absolute; top: -6px; transform: translate(-50%, -100%); pointer-events: none;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-  padding: 3px 7px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12);
-  font-variant-numeric: tabular-nums; display: none; z-index: 2;
-}
-.meter { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; margin: 6px 0 2px; }
-.meter > i { display: block; height: 100%; border-radius: 4px; background: var(--s1); }
-.meter > i.warn { background: var(--warning); }
-.meter > i.crit { background: var(--critical); }
-.mrow { margin-top: 8px; }
-.mrow .l { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-2); }
-.mrow .l b { color: var(--ink); font-weight: 500; }
-
-/* tables */
-.tbl { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
-.tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
-.tbl td { padding: 4px 6px; border-bottom: 1px solid var(--grid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tbl tr:last-child td { border-bottom: 0; }
-.tbl tr.open { cursor: pointer; }
-.tbl tr.open:hover td { background: var(--grid); }
-.tbl tr.open a { color: inherit; text-decoration: none; }
-.tbl tr.open:hover a, .tbl tr.open a:focus-visible { text-decoration: underline; }
-.num { text-align: right !important; font-variant-numeric: tabular-nums; }
-/* Process tables on phones: drop PID, user, age and the unsorted metric so the command has room. */
-@media (max-width: 560px) { .tbl .wide { display: none; } }
-.cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-.bar { display: inline-block; height: 6px; border-radius: 0 3px 3px 0; background: var(--s1); vertical-align: middle; margin-right: 6px; }
-.scroll { overflow-x: auto; }
-.section { margin-top: 12px; }
-/* claude sessions */
-.sessions { margin-top: 24px; margin-bottom: 12px; }
-.sess { padding: 14px 0; border-top: 1px solid var(--grid); display: grid; gap: 6px; min-width: 0; }
-.sess:first-of-type { border-top: 0; padding-top: 6px; }
-.sess:last-of-type { padding-bottom: 2px; }
-.sess .top { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
-.sess .where { color: var(--ink-2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sess .sep { color: var(--muted); }
-.sess .ids { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
-.sess .ttl { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sess .reply { font-size: 13px; line-height: 1.5; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; white-space: nowrap; flex: none; }
-/* compact view: mirrors `claude agents` */
-.card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.card-head h2 { margin: 0; }
-.seg { margin-left: auto; display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; flex: none; }
-.seg button { background: none; border: 0; color: var(--ink-2); font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; }
-.seg button + button { border-left: 1px solid var(--border); }
-.seg button[aria-pressed="true"] { background: var(--page); color: var(--ink); font-weight: 500; }
-.agents { font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.agents .dir { color: var(--ink-2); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--grid); }
-.agents .dir:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-.agents .row {
-  display: grid; grid-template-columns: 1.5ch minmax(0, 32ch) minmax(0, 1fr) auto; gap: 0 1.5ch;
-  align-items: baseline; padding: 1px 6px; margin: 0 -6px; border-radius: 4px;
-}
-.agents .row:hover { background: var(--page); }
-.agents .g { color: var(--muted); display: flex; align-items: center; justify-content: center; align-self: center; }
-.agents .g svg { display: block; }
-.agents .g.busy { color: var(--s1); animation: pulse 1.4s ease-in-out infinite; }
-.agents .g.waiting { color: var(--warning); }
-.agents .g.stopped { color: var(--critical); }
-.agents .t, .agents .d { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.agents .st { font-weight: 600; }
-.agents .d { color: var(--ink-2); }
-.agents .age { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-@media (prefers-reduced-motion: reduce) { .agents .g.busy { animation: none; } }
-@media (max-width: 560px) {
-  .agents .row { grid-template-columns: 1.5ch minmax(0, 1fr) auto; }
-  .agents .g, .agents .t, .agents .age { grid-row: 1; }
-  .agents .age { grid-column: 3; }
-  .agents .d { grid-row: 2; grid-column: 2 / 4; }
-  .card-head { align-items: flex-start; }
-  .counts { display: block; margin: 2px 0 0; }
-  /* No room for the idle count on phones; drop the dot before it if it was last. */
-  .counts .idle { display: none; }
-  .counts span:has(+ .idle:last-child)::after { content: none; }
-}
-.stop {
-  font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink-2); background: none;
-  border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; line-height: 18px; cursor: pointer;
-}
-.stop:hover, .stop:focus-visible { color: var(--critical); border-color: var(--critical); }
-.stop:disabled { opacity: .5; cursor: default; }
-.agents .stop { opacity: 0; margin-left: 8px; }
-.agents .row:hover .stop, .agents .stop:focus-visible { opacity: 1; }
-@media (hover: none) { .agents .stop { opacity: 1; } }
-.note-inline { color: var(--muted); font-weight: 400; font-size: 12px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--muted); }
-.dot.busy { background: var(--s1); animation: pulse 1.4s ease-in-out infinite; }
-.dot.waiting { background: var(--warning); }
-.dot.idle { background: var(--muted); }
-.dot.stopped { background: var(--critical); }
-.dot.good { background: var(--good); }
-@keyframes pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
-@media (max-width: 560px) { .sess .top { flex-wrap: wrap; } .sess .sep { display: none; } .sess .where { flex-basis: 100%; order: 3; } }
-.counts span { white-space: nowrap; }
-.counts span:not(:last-child)::after { content: " ·"; }
-.counts { color: var(--ink-2); font-weight: 400; margin-left: 8px; }
-.actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
-.actions button { white-space: nowrap; }
-.hib-btn { background: var(--s1); color: #fff; border: 0; border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
-.hib-btn:hover { filter: brightness(1.1); }
-.hib-btn:disabled { opacity: .6; cursor: default; }
-.banner { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
-/* agent runner */
-.runner-next { margin-left: auto; color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.runner-now { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; padding-bottom: 24px; padding-top: 12px; border-bottom: none; }
-.runner-now .sep { color: var(--muted); }
-.runner-now a { color: inherit; white-space: nowrap; }
-.runner-now .ttl { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.runner-now .d { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
-.runner h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 14px 0 4px; }
-.runner .tbl a { color: inherit; }
-.runner .tbl .chip { font-size: 12px; }
-.runner .dim { color: var(--muted); }
-.runner .log { height: 200px; }
-.runner h3 .note-inline { margin-left: 6px; }
-.dot.queued { background: none; border: 2px solid var(--s1); }
-.issues { table-layout: auto; }
-.issues td { vertical-align: middle; padding-top: 9px; padding-bottom: 9px; }
-.issues th { font-size: 13px; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
-.issues th, .issues td { width: 1%; }
-.issues th + th, .issues td + td { padding-left: 16px; }
-/* max-width:0 lets the ellipsis work in an auto-layout table */
-.issues .main { width: 100%; max-width: 0; }
-.issues .ttl { font-weight: 500; }
-.issues .state { display: flex; align-items: center; gap: 8px; }
-.tags { display: flex; gap: 4px; }
-.copy {
-  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); background: none; border: 0;
-  padding: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; text-align: left;
-  display: inline-flex; align-items: center;
-}
-.copy .br { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; color: var(--muted); }
-.copy .br svg { flex: none; }
-.divider { border: 0; border-top: 1px solid var(--axis); margin: 50px 0 50px; }
-.copy:hover, .copy:focus-visible { color: var(--ink); text-decoration: underline; outline: none; }
-.copy.done { color: var(--good-ink); text-decoration: none; }
-.copy-btn { font-size: 11px; padding: 0 6px; margin-left: 8px; line-height: 18px; vertical-align: 1px; }
-details.fold > summary { list-style: none; cursor: pointer; display: inline-block; }
-details.fold > summary h3 { display: flex; align-items: center; gap: 6px; }
-details.fold > summary::-webkit-details-marker { display: none; }
-details.fold > summary svg { transition: transform .15s; }
-details.fold[open] > summary svg { transform: rotate(90deg); }
-details.fold > summary:hover h3 { color: var(--ink-2); }
-.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 18px; padding: 0 7px; border: 1px solid var(--border); border-radius: 9px; color: var(--ink-2); }
-.tag i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-#runnerStart:not([hidden]) { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
-/* Copy icon fades in on hover so it's clear a click copies; opacity keeps the width fixed */
-.copy .cp { display: inline-flex; margin-left: 6px; color: var(--muted); opacity: 0; transition: opacity .1s; }
-.copy:hover .cp, .copy:focus-visible .cp { opacity: 1; }
-.runs tbody tr { cursor: pointer; }
-.runs tbody tr:hover, .runs tbody tr:focus-visible, .issues .lastrun:hover { background: var(--page); outline: none; }
-.issues .lastrun { cursor: pointer; border-radius: 4px; }
 /* run modal */
 .run-body { display: grid; gap: 14px; overflow-wrap: anywhere; }
 .run-body > * { min-width: 0; }
 .run-body h3 { margin: 0 0 4px; }
+.run-body .runner-now { margin: 0; }
 .run-body .facts { margin-top: 0; padding-top: 0; border-top: 0; }
 .run-body .md { white-space: pre-wrap; font-size: 13px; line-height: 1.55; padding: 10px 12px; border-radius: 8px; background: var(--page); border: 1px solid var(--border); }
 .run-body ul { margin: 0; padding-left: 20px; font-size: 13px; }
 .run-body li + li { margin-top: 4px; }
 .run-body .log { height: auto; max-height: 320px; }
 .run-body summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
-/* issue title opens the issue modal */
-.issues .ttl[data-issue] { cursor: pointer; }
-.issues .ttl[data-issue]:hover, .issues .ttl[data-issue]:focus-visible { text-decoration: underline; outline: none; }
-/* phones: the issues table becomes a list of "● repo#N title" rows */
-.issue-list { display: none; }
-.issue-list h3 { margin: 0 0 2px; }
-.irow { display: flex; align-items: center; gap: 10px; padding: 10px 6px; margin: 0 -6px; border-bottom: 1px solid var(--grid); cursor: pointer; border-radius: 4px; }
-.irow:last-child { border-bottom: 0; }
-.irow:hover, .irow:focus-visible { background: var(--page); outline: none; }
-.irow .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-.irow .ref { color: var(--ink-2); font-weight: 400; }
-@media (max-width: 760px) {
-  .issues { display: none; }
-  .issue-list { display: block; }
-  /* runner card head: just the "next run in ..." countdown, no schedule or copyable command */
-  .runner-next .sched { display: none; }
-  #runnerStart:not([hidden]) { display: none; }
-  /* issue modal: branch on its own line under the worktree path, so the modal fits the screen */
-  .issue-modal .copy { flex-wrap: wrap; white-space: normal; }
-  .issue-modal .copy .br { order: 1; flex-basis: 100%; margin-left: 0; margin-top: 2px; }
-}
+
 /* issue modal */
 dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
 .issue-modal .modal-head { align-items: flex-start; }
 .issue-modal .modal-head h2 { line-height: 1.35; }
 .issue-modal .copy .cp { opacity: 1; }
+.issue-modal .state { display: flex; align-items: center; gap: 8px; }
+.issue-modal .state a { color: inherit; }
 .issue-modal .run-body .facts { padding-top: 14px; border-top: 1px solid var(--grid); }
 .links { display: flex; flex-wrap: wrap; gap: 8px; }
 .link-btn {
@@ -355,19 +296,34 @@ dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
 }
 .link-btn:hover, .link-btn:focus-visible { filter: brightness(1.1); }
 .link-btn.off { background: none; color: var(--muted); border: 1px solid var(--border); }
-.tags.wrap { flex-wrap: wrap; }
 .issue-modal .lastrun { cursor: pointer; }
 .issue-modal .lastrun:hover .dim, .issue-modal .lastrun:focus-visible .dim { color: var(--ink); }
-.theme { background: none; border: 1px solid var(--border); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+
+/* phones */
+@media (max-width: 640px) {
+  main { padding: 20px 12px 48px; gap: 12px; }
+  .grid { gap: 12px; }
+  .card { padding: 16px; }
+  /* rows keep the title and status; directory, last-run age and the secondary table columns go */
+  .rows .where, .rows .side .dim, .tbl .wide { display: none; }
+  /* runner card head: just the "next run in ..." countdown, no schedule or copyable command */
+  .runner-next .sched, #runnerStart { display: none; }
+  /* issue modal: branch on its own line under the worktree path, so the modal fits the screen */
+  .issue-modal .copy { flex-wrap: wrap; white-space: normal; }
+  .issue-modal .copy .br { order: 1; flex-basis: 100%; margin-left: 0; margin-top: 2px; }
+}
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1 id="host">devbox</h1>
-    <div class="meta" id="meta"></div>
+    <div class="id">
+      <h1 id="host">devbox</h1>
+      <div class="meta" id="meta"></div>
+    </div>
     <div class="actions">
-      <button class="theme" id="theme" type="button">Theme</button>
+      <button class="pill" id="hibCard" type="button" aria-haspopup="dialog" hidden></button>
+      <button class="theme" id="theme" type="button">Auto</button>
     </div>
   </header>
 
@@ -380,12 +336,13 @@ dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
       <div>
         <div class="status" id="hibStatus"></div>
         <div class="hero" id="hibHero">–</div>
-        <div class="sub" id="hibSub" style="color:var(--ink-2)"></div>
+        <div class="dim" id="hibSub"></div>
         <div class="steps" id="hibSteps" aria-hidden="true"></div>
         <dl class="facts" id="hibFacts"></dl>
+        <button class="hib-btn" id="hibBtn" type="button" hidden>Hibernate now</button>
       </div>
       <div>
-        <h2 id="logTitle">Idle checker log</h2>
+        <h3 id="logTitle">Idle checker log</h3>
         <pre class="log" id="log"></pre>
         <div class="note" id="logNote"></div>
       </div>
@@ -402,33 +359,32 @@ dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
     <div class="note" id="slogNote"></div>
   </dialog>
 
-  <section class="card sessions" id="claudeCard" hidden>
+  <section class="card" id="claudeCard" hidden>
     <div class="card-head">
       <h2>Claude sessions<span class="counts" id="claudeCounts"></span></h2>
-      <div class="seg" role="group" aria-label="Session view">
-        <button type="button" data-view="expanded">Expanded</button><button type="button" data-view="compact">Compact</button>
-      </div>
     </div>
     <div id="claude"></div>
   </section>
 
   <section class="card runner" id="runnerCard" hidden>
     <div class="card-head">
-      <h2>Agent runner</h2>
+      <h2>Agent runner<span class="counts" id="runnerCounts"></span></h2>
       <span class="runner-next" id="runnerNext"></span>
       <span id="runnerStart" hidden></span>
     </div>
-    <div class="runner-now" id="runnerNow"></div>
-    <div class="scroll section" id="runnerIssues"></div>
+    <div class="runner-now" id="runnerNow" hidden></div>
+    <div id="runnerIssues"></div>
     <div class="note" id="runnerIssuesNote" hidden></div>
-    <details class="fold" id="runnerRunsFold">
-      <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Recent runs<span id="runnerRunsNote"></span></h3></summary>
-      <div class="scroll" id="runnerRuns"></div>
-    </details>
-    <details class="fold" id="runnerLogFold">
-      <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>cron.log</h3></summary>
-      <pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div>
-    </details>
+    <div class="folds">
+      <details class="fold" id="runnerRunsFold">
+        <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Recent runs<span id="runnerRunsNote"></span></h3></summary>
+        <div class="scroll" id="runnerRuns"></div>
+      </details>
+      <details class="fold" id="runnerLogFold">
+        <summary><h3><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>cron.log</h3></summary>
+        <pre class="log" id="runnerLog"></pre><div class="note" id="runnerLogNote"></div>
+      </details>
+    </div>
   </section>
 
   <dialog class="modal" id="runModal" aria-labelledby="runModalTitle">
@@ -447,33 +403,24 @@ dialog.issue-modal { width: min(640px, calc(100vw - 32px)); }
     <div class="run-body" id="issueBody"></div>
   </dialog>
 
-  <hr class="divider">
-
   <section class="grid tiles">
-    <div class="card tile hib-tile" id="hibCard" role="button" tabindex="0" aria-haspopup="dialog" title="Show auto-hibernate details and log" hidden>
-      <div class="label">Auto-hibernate<span class="more">Details ›</span></div>
-      <div class="sub" id="hibTileS"></div>
-      <div class="value" id="hibTileV">–</div>
-      <div class="sub" id="hibTileSub"></div>
-      <div class="steps" id="hibTileSteps" aria-hidden="true"></div>
-      <div class="hib-foot"><div class="sub" id="hibTileNext"></div><button class="hib-btn" id="hibBtn" type="button" hidden>Hibernate now</button></div>
-    </div>
     <div class="card tile"><div class="label">CPU</div><div class="value" id="cpuV">–</div><div class="sub" id="cpuS"></div><div class="spark" id="cpuC"></div></div>
-    <div class="card tile"><div class="label">Load (1 min)</div><div class="value" id="loadV">–</div><div class="sub" id="loadS"></div><div class="spark" id="loadC"></div></div>
     <div class="card tile"><div class="label">Memory</div><div class="value" id="memV">–</div><div class="sub" id="memS"></div><div class="spark" id="memC"></div></div>
+    <div class="card tile"><div class="label">Disk</div><div class="value" id="diskV">–</div><div class="sub" id="diskS"></div><div id="disks"></div></div>
   </section>
 
-  <section class="card section"><h2>Listening ports</h2><div class="scroll" id="ports"></div></section>
-
-  <section class="grid two section">
-    <div class="card"><h2>Disks</h2><div id="disks"></div></div>
-    <div class="card"><h2>Swap</h2><div id="swap"></div></div>
+  <section class="card">
+    <div class="card-head"><h2>Listening ports</h2></div>
+    <div class="scroll" id="ports"></div>
   </section>
 
-  <section class="grid two section">
-    <div class="card"><h2>Top processes by CPU</h2><div class="scroll" id="topCpu"></div></div>
-    <div class="card"><h2>Top processes by memory</h2><div class="scroll" id="topMem"></div></div>
-  </section>
+  <details class="card fold" id="procFold">
+    <summary><h2><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 1.5L7 5l-3.5 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Top processes</h2></summary>
+    <div class="grid two">
+      <div class="scroll" id="topCpu"></div>
+      <div class="scroll" id="topMem"></div>
+    </div>
+  </details>
 
 </main>
 
@@ -514,7 +461,8 @@ try { theme = localStorage.getItem("dash-theme") || "auto"; } catch (e) {}
 function applyTheme() {
   if (theme === "auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", theme);
-  $("theme").textContent = "Theme: " + theme;
+  $("theme").textContent = theme[0].toUpperCase() + theme.slice(1);
+  $("theme").title = "Theme: " + theme + " (click to switch)";
 }
 $("theme").onclick = () => {
   theme = themes[(themes.indexOf(theme) + 1) % 3]; applyTheme();
@@ -577,11 +525,11 @@ function spark(el, times, series, opts = {}) {
   svg.onmouseleave = () => { tip.style.display = "none"; xh.setAttribute("visibility", "hidden"); };
 }
 
-function meterRow(label, used, total, extra) {
+function meterRow(label, used, total, title) {
   const pct = total ? used / total * 100 : 0;
   const cls = pct >= 90 ? "crit" : pct >= 75 ? "warn" : "";
-  return `<div class="mrow"><div class="l"><span><b>${esc(label)}</b> ${extra || ""}</span>
-    <span>${bytes(used)} / ${bytes(total)} · ${pct.toFixed(0)}%</span></div>
+  return `<div class="mrow" title="${esc(title || "")}"><div class="l"><b>${esc(label)}</b>
+    <span>${bytes(used)} / ${bytes(total)}</span></div>
     <div class="meter" role="meter" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(label)}"><i class="${cls}" style="width:${Math.max(pct, 0.5)}%"></i></div></div>`;
 }
 
@@ -671,6 +619,7 @@ $("hibBtn").onclick = async () => {
     const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
     if (!r.ok) throw new Error(res.message);
     hibernating = true; stopPolling();
+    hibModal.close();
     document.querySelector("main").insertAdjacentHTML("afterbegin",
       `<div class="banner">Hibernating since ${hhmm(Date.now() / 1000)}. This page stops updating; reload it after waking the box.</div>`);
   } catch (err) {
@@ -682,18 +631,14 @@ $("hibBtn").onclick = async () => {
 function procTable(rows, key) {
   if (!rows || !rows.length) return '<div class="note">Collecting samples…</div>';
   const max = Math.max(...rows.map(r => r[key] || 0)) || 1;
-  // Widths sit on the header cells, not a <colgroup>, so the "wide" columns
-  // can be hidden on narrow screens without shifting the others.
-  const wide = k => k === key ? "num" : "num wide";
+  // Just the sorted metric and the command; pid, user and age are in the row's tooltip.
   return `<table class="tbl">
-    <thead><tr><th class="num wide" style="width:64px">PID</th><th class="wide" style="width:72px">User</th><th class="${wide("cpu")}" style="width:${key === "cpu" ? 110 : 64}px">CPU</th><th class="${wide("rss")}" style="width:${key === "rss" ? 120 : 76}px">Memory</th><th class="num wide" style="width:64px">Age</th><th>Command</th><th style="width:52px"></th></tr></thead><tbody>` +
+    <thead><tr><th class="num" style="width:112px">${key === "cpu" ? "CPU" : "Memory"}</th><th>Command</th><th style="width:52px"></th></tr></thead><tbody>` +
     rows.map(r => {
-      const bar = w => `<span class="bar" style="width:${Math.max(1, w / max * 40)}px"></span>`;
-      const cpu = r.cpu == null ? "–" : r.cpu.toFixed(1) + "%";
-      return `<tr><td class="num wide">${r.pid}</td><td class="wide">${esc(r.user)}</td>
-        <td class="${wide("cpu")}">${key === "cpu" ? bar(r.cpu) : ""}${cpu}</td>
-        <td class="${wide("rss")}">${key === "rss" ? bar(r.rss) : ""}${bytes(r.rss, 0)}</td>
-        <td class="num wide">${dur(r.age)}</td><td class="cmd" title="${esc(r.cmd)}">${esc(r.cmd)}</td>
+      const val = key === "cpu" ? (r.cpu == null ? "–" : r.cpu.toFixed(1) + "%") : bytes(r.rss, 0);
+      return `<tr title="${esc(`pid ${r.pid} · ${r.user} · running ${dur(r.age)}\n${r.cmd}`)}">
+        <td class="num"><span class="bar" style="width:${Math.max(1, (r[key] || 0) / max * 40)}px"></span>${val}</td>
+        <td class="cmd">${esc(r.cmd)}</td>
         <td class="num">${stopButton(r.pid, r.start, r.user, r.cmd)}</td></tr>`;
     }).join("") + "</tbody></table>";
 }
@@ -710,15 +655,6 @@ function sessionChip(s, now) {
   const note = s.status === "shell" ? '<span class="note-inline">shell running</span>' : "";
   return `<span class="chip"><span class="dot ${esc(dot)}" aria-hidden="true"></span>${esc(label)}${note}</span>`;
 }
-
-// Per-viewer convenience only; the page works without storage.
-let claudeView = "expanded";
-try { claudeView = localStorage.getItem("dash-claude-view") || "expanded"; } catch (e) {}
-document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
-  claudeView = b.dataset.view;
-  try { localStorage.setItem("dash-claude-view", claudeView); } catch (e) {}
-  if (last) renderClaude(last);
-});
 
 const sessionTitle = s => s.title || (s.prompt ? s.prompt.slice(0, 120) : s.name || "session " + s.pid);
 
@@ -825,35 +761,8 @@ function sessionDetail(s) {
   return s.reply || "";
 }
 
-function renderCompact(list, now) {
-  const groups = new Map();  // cwd -> sessions, in the list's priority order
-  for (const s of list) {
-    const k = s.cwd || "";
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(s);
-  }
-  let html = '<div class="agents">';
-  for (const [cwd, items] of groups) {
-    html += `<div class="dir" title="${esc(cwd)}">${esc(home(cwd))}</div>`;
-    for (const s of items) {
-      const st = s.status === "shell" ? "idle" : s.status;
-      // ✻ for sessions that are live or need you, • otherwise, as in `claude agents`.
-      // Drawn as SVG: the dingbat is missing from many monospace fonts.
-      const glyph = st === "busy" || st === "waiting"
-        ? '<svg width="11" height="11" viewBox="0 0 12 12"><path d="M6 1v10M1.7 3.5l8.6 5M1.7 8.5l8.6-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
-        : '<svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>';
-      const title = sessionTitle(s), detail = sessionDetail(s);
-      html += `<div class="row${logAttrs(s)}>
-        <span class="g ${esc(st)}" aria-hidden="true">${glyph}</span>
-        <span class="t" title="${esc(title)}">${esc(title)}</span>
-        <span class="d" title="${esc(detail)}"><span class="st">${esc(STATUS[s.status] || s.status)}</span>${detail ? " · " + esc(detail) : ""}</span>
-        <span class="age">${s.status_since ? dur(now - s.status_since) : ""}${s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + title + "”")}</span>
-      </div>`;
-    }
-  }
-  return html + "</div>";
-}
-
+// One row per session: what it's about, then its status and what it's doing
+// or last said. The directory and how long it's been in that status sit on the right.
 function renderClaude(d) {
   const list = d.claude || [];
   $("claudeCard").hidden = false;
@@ -861,22 +770,24 @@ function renderClaude(d) {
   const n = st => list.filter(s => s.status === st || (st === "idle" && s.status === "shell")).length;
   $("claudeCounts").innerHTML = [["busy", "working"], ["waiting", "need input"], ["idle", "idle"], ["stopped", "stopped"]]
     .map(([st, word]) => n(st) ? `<span class="${st}">${n(st)} ${word}</span>` : "").filter(Boolean).join(" ");
-  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === claudeView)));
   slogHead();
-  if (!list.length) { $("claude").innerHTML = '<div class="note">No active agents right now</div>'; return; }
-  if (claudeView === "compact") { $("claude").innerHTML = renderCompact(list, now); return; }
-  $("claude").innerHTML = list.map(s => {
+  if (!list.length) { $("claude").innerHTML = '<div class="note">No sessions running</div>'; return; }
+  $("claude").innerHTML = '<div class="rows">' + list.map(s => {
     const title = sessionTitle(s);
-    const ids = s.status === "stopped" ? `pid ${s.pid}` :
-      `pid ${s.pid}${s.cpu != null ? " · " + s.cpu.toFixed(1) + "% CPU" : ""}${s.rss ? " · " + bytes(s.rss, 0) : ""}`;
+    const status = STATUS[s.status] || s.status;
+    const detail = sessionDetail(s) || (s.status === "shell" ? "shell running" : "");
+    const where = home(s.cwd) + (s.branch ? " · " + s.branch : "");
     return `<div class="sess${logAttrs(s)}>
-      <div class="top">${sessionChip(s, now)}<span class="sep">•</span>
-        <span class="where" title="${esc(s.cwd)}">${esc(home(s.cwd))}${s.branch ? " · " + esc(s.branch) : ""}</span>
-        <span class="ids">${ids}</span>${s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + title + "”")}</div>
-      <div class="ttl" title="${esc(title)}">${esc(title)}</div>
-      ${s.reply ? `<div class="reply" title="${esc(s.reply)}">${esc(s.reply)}</div>` : ""}
+      <span class="dot ${esc(s.status === "shell" ? "idle" : s.status)}" aria-hidden="true"></span>
+      <div class="body">
+        <div class="ttl" title="${esc(title)}">${esc(title)}</div>
+        <div class="d" title="${esc(detail)}"><b>${esc(status)}</b>${detail ? " · " + esc(detail) : ""}</div>
+      </div>
+      <span class="where" title="${esc(s.cwd + (s.branch ? "\nBranch " + s.branch : "") + "\npid " + s.pid)}">${esc(where)}</span>
+      <span class="age">${s.status_since ? dur(now - s.status_since) : ""}</span>
+      ${s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + title + "”")}
     </div>`;
-  }).join("");
+  }).join("") + "</div>";
 }
 
 // Agent runner: the run's outcome as the agent reported it ("done" means a PR
@@ -946,25 +857,17 @@ function renderIssues(r, now) {
   $("runnerIssuesNote").hidden = !(gh && gh.error);
   $("runnerIssuesNote").textContent = gh && gh.error ? "Couldn't refresh from GitHub: " + gh.error : "";
   const open = rows.filter(x => x.state !== "closed").length;
-  // Other columns shrink to their contents (width:1% + nowrap); the issue column takes the rest.
-  $("runnerIssues").innerHTML = rows.length ? `<table class="tbl issues">
-    <thead><tr><th class="main">Issues (${open} open)</th><th>Tags</th><th>${esc(home(r.home))}/worktrees/</th><th>State</th><th>Last run</th></tr></thead><tbody>` +
-    rows.map(x => {
-      const wt = x.worktree, run = x.last_run;
-      const wtTitle = wt && `Click to copy: cd ${wt.path}\nBranch ${wt.branch}${wt.activity ? " · last git activity " + dur(now - wt.activity) + " ago" : ""}`;
-      return `<tr>
-      <td class="main" title="${esc(x.title || "")}">${x.issue != null ? issueLink(x) : esc(wt ? wt.name : "")} <span class="ttl" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog">${esc(x.title || "")}</span></td>
-      <td>${x.labels && x.labels.length ? `<div class="tags">${x.labels.map(tag).join("")}</div>` : '<span class="dim">–</span>'}</td>
-      <td>${wt ? `<button type="button" class="copy" data-copy="${esc("cd " + wt.path)}" title="${esc(wtTitle)}">${esc(wt.path.split("/").pop())}${wt.branch ? `<span class="br">${BRANCH_ICON}${esc(wt.branch)}</span>` : ""}<span class="cp" aria-hidden="true">${COPY_ICON}</span></button>` : '<span class="dim">–</span>'}</td>
-      <td><div class="state">${issueState(x)}</div></td>
-      <td>${run ? `<span class="lastrun" data-log="${esc(logName(run.log))}" tabindex="0" title="Show run details">${runChip(run.status)} <span class="dim">${dur(now - run.started)} ago</span></span>` : '<span class="dim">–</span>'}</td></tr>`;
-    }).join("") + "</tbody></table>" +
-    // Phones get a one-line-per-issue list instead of the table; a row opens the issue modal.
-    `<div class="issue-list"><h3>Issues (${open} open)</h3>${rows.map(x => {
+  $("runnerCounts").textContent = open ? open + " open" : "";
+  // One line per issue: state, title, PR and when it last ran. A row opens the
+  // issue modal, which has the rest (labels, worktree, branch, links, last run).
+  $("runnerIssues").innerHTML = rows.length ? `<div class="rows">${rows.map(x => {
       const [dot, label] = ISSUE_STATE[x.state] || ["idle", "No agent label"];
-      return `<div class="irow" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog">
-        <span class="dot ${dot}" role="img" title="State: ${esc(label)}" aria-label="State: ${esc(label)}"></span>
-        <span class="t"><span class="ref">${esc(issueKey(x))}</span> ${esc(x.title || "")}</span></div>`;
+      const state = x.state === "pr" && x.pr ? `${prLink(x.pr)} to review` : esc(label) + (x.pr ? " · " + prLink(x.pr) : "");
+      const run = x.last_run;
+      return `<div class="irow" data-issue="${esc(issueKey(x))}" role="button" tabindex="0" aria-haspopup="dialog" title="${esc(x.title || "")}">
+        <span class="dot ${dot}" aria-hidden="true"></span>
+        <div class="body"><div class="ttl"><span class="ref">${esc(issueKey(x))}</span> ${esc(x.title || "")}</div></div>
+        <span class="side"><span>${state}</span>${run ? `<span class="dim" title="Last run: ${esc((RUN_STATUS[run.status] || [0, run.status])[1])}">${dur(now - run.started)} ago</span>` : ""}</span></div>`;
     }).join("")}</div>`
     : `<div class="note">${gh ? "No open issues with an agent label. Add <b>agent</b> to an issue to queue it." : "Loading issues from GitHub…"}</div>`;
   renderIssueModal(now);
@@ -1148,6 +1051,8 @@ function renderRunner(d) {
   $("runnerRunsNote").textContent = [["done", "done"], ["needs_human", "need you"], ["failed", "failed"], ["interrupted", "interrupted"]]
     .map(([st, word]) => n(st) && ` · ${n(st)} ${word}`).filter(Boolean).join("");
 
+  // The "now" strip only shows while a run is going; idle is the quiet default.
+  $("runnerNow").hidden = !(cur || r.running);
   if (cur) {
     const s = cur.session;
     const detail = s ? `${STATUS[s.status] || s.status}${sessionDetail(s) ? " · " + sessionDetail(s) : ""}` : "";
@@ -1157,23 +1062,21 @@ function renderRunner(d) {
       <span class="dim" id="runnerElapsed"></span>`;
   } else if (r.running) {
     $("runnerNow").innerHTML = `${runChip("running")}<span class="d">checking for issues labeled <b>agent</b></span>`;
-  } else {
-    $("runnerNow").innerHTML = `<span class="chip"><span class="dot idle" aria-hidden="true"></span>Idle</span>
-      <span class="d">${r.last_log_line ? "last logged " + dur(now - r.last_log_line) + " ago" : ""}</span>`;
   }
 
   renderIssues(r, now);
   renderStart(r);
 
-  $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl runs"><colgroup><col style="width:120px"><col style="width:30%"><col style="width:112px"><col style="width:64px"><col style="width:64px"><col></colgroup>
-    <thead><tr><th>Started</th><th>Issue</th><th>Outcome</th><th class="num">Took</th><th class="num">Cost</th><th>Summary</th></tr></thead><tbody>` +
-    r.runs.map(x => `<tr tabindex="0" data-log="${esc(logName(x.log))}" title="Show run details">
-      <td>${clock(x.started)}</td>
-      <td title="${esc(x.title || "")}">${issueLink(x)} ${esc(x.title || "")}</td>
+  // Widths sit on the header cells, not a <colgroup>, so the "wide" columns
+  // can be hidden on narrow screens without shifting the others.
+  $("runnerRuns").innerHTML = r.runs.length ? `<table class="tbl runs">
+    <thead><tr><th style="width:112px">Outcome</th><th>Issue</th><th class="wide" style="width:128px">Started</th><th class="num wide" style="width:72px">Took</th><th class="num wide" style="width:64px">Cost</th></tr></thead><tbody>` +
+    r.runs.map(x => `<tr tabindex="0" data-log="${esc(logName(x.log))}" title="${esc(x.summary || "Show run details")}">
       <td>${runChip(x.status)}</td>
-      <td class="num">${x.ended ? dur(x.ended - x.started) : x.status === "running" ? '<span class="liveRun"></span>' : "–"}</td>
-      <td class="num">${x.cost != null ? "$" + x.cost.toFixed(2) : "–"}</td>
-      <td>${esc(x.summary || "")}</td></tr>`).join("") +
+      <td>${issueLink(x)} ${esc(x.title || "")}</td>
+      <td class="wide">${clock(x.started)}</td>
+      <td class="num wide">${x.ended ? dur(x.ended - x.started) : x.status === "running" ? '<span class="liveRun"></span>' : "–"}</td>
+      <td class="num wide">${x.cost != null ? "$" + x.cost.toFixed(2) : "–"}</td></tr>`).join("") +
     "</tbody></table>" : '<div class="note">No runs yet</div>';
 
   const el = $("runnerLog");
@@ -1196,29 +1099,28 @@ function renderIdle(d) {
   $("hibCard").hidden = !idle;
   if (!idle) { if ($("hibModal").open) $("hibModal").close(); return; }
   const now = Date.now() / 1000;
-  let status, hero, sub;
+  let status, hero, sub, pill;
   if (!idle.enabled) {
     status = ICON.off + " Paused";
     hero = "Off";
     sub = "IDLE_HIBERNATE=off in /etc/devbox/idle.conf";
+    pill = ICON.off + " Auto-hibernate off";
   } else if (idle.count > 0) {
     status = ICON.warning + ` Idle, check ${idle.count} of ${idle.needed}`;
     hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
     sub = "until hibernation";
+    pill = ICON.warning + " Idle · hibernates in " + hero;
   } else {
     const reason = idle.last_status && /^active \((.*)\)$/.exec(idle.last_status.message);
     status = ICON.good + " Active" + (reason ? ": " + esc(reason[1]) : "");
     hero = idle.hibernate_at ? dur(idle.hibernate_at - now) : "–";
     sub = "until hibernation";
+    pill = ICON.good + " Hibernates in " + hero;
   }
   const steps = Array.from({ length: idle.needed }, (_, i) => `<span class="${i < idle.count ? "on" : ""}"></span>`).join("");
-  // Compact tile on the page; the modal repeats it with the facts and log.
-  $("hibTileV").textContent = hero;
-  $("hibTileS").innerHTML = `<span class="status">${status}</span>`;
-  $("hibTileS").title = $("hibTileS").textContent.trim();
-  $("hibTileSub").textContent = sub;
-  $("hibTileSteps").innerHTML = steps;
-  $("hibTileNext").innerHTML = idle.enabled ? '<span class="liveNext"></span>' : "";
+  // A pill in the header; the modal has the countdown, facts, log and Hibernate now.
+  if ($("hibCard").dataset.html !== pill) { $("hibCard").dataset.html = pill; $("hibCard").innerHTML = pill; }
+  $("hibCard").title = "Auto-hibernate: show details, the idle log and Hibernate now";
   $("hibStatus").innerHTML = status;
   $("hibHero").textContent = hero;
   // The idle-check countdown ticks live (tickLive); everything else is per-minute.
@@ -1233,6 +1135,7 @@ function renderIdle(d) {
     host.slept > 60 && ["Hibernated since boot", dur(host.slept)],
     ["Claude heartbeat", "", "liveBeat"],
     ["Idle window", idle.idle_minutes + " min · load busy > " + idle.load_busy.toFixed(2)],
+    ["Load now", d.cpu.load[0].toFixed(2) + " (1 min)"],
   ].filter(Boolean);
   $("hibFacts").innerHTML = facts.map(([k, v, id]) => `<dt>${esc(k)}</dt><dd${id ? ` id="${id}"` : ""}>${esc(v)}</dd>`).join("");
   tickLive();
@@ -1243,11 +1146,7 @@ function openHibModal() {
   hibModal.showModal();
   $("log").scrollTop = $("log").scrollHeight;
 }
-// The tile opens the details modal; its Hibernate now button doesn't.
-$("hibCard").onclick = e => { if (!e.target.closest("button")) openHibModal(); };
-$("hibCard").onkeydown = e => {
-  if (e.target === $("hibCard") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openHibModal(); }
-};
+$("hibCard").onclick = openHibModal;
 $("hibClose").onclick = () => hibModal.close();
 // Click on the backdrop (outside the dialog box) closes it.
 hibModal.onclick = e => {
@@ -1279,11 +1178,11 @@ function render(d) {
   $("host").textContent = inst.name || h.hostname;
   updateTab(inst.name || h.hostname.split(".")[0], d.claude || []);
   const age = Date.now() / 1000 - d.time;
+  // One quiet line; the instance id and architecture are in its tooltip.
+  const about = [inst.instance_type, inst.region, "up " + dur(h.uptime - (h.slept || 0))].filter(Boolean).join(" · ");
+  const more = [inst.instance_id, `${h.nproc} vCPU`, h.arch].filter(Boolean).join(" · ");
   $("meta").innerHTML = [
-    inst.instance_type && `<span><b>${esc(inst.instance_type)}</b> · ${esc(inst.region || "")}</span>`,
-    inst.instance_id && `<span>${esc(inst.instance_id)}</span>`,
-    `<span>${h.nproc} vCPU · ${esc(h.arch)}</span>`,
-    `<span>running ${dur(h.uptime - (h.slept || 0))} since boot</span>`,
+    `<span title="${esc(more)}">${esc(about)}</span>`,
     age > 20 ? `<span class="stale">data ${dur(age)} old</span>` : "",
     d.error ? `<span class="stale">sampler error: ${esc(d.error)}</span>` : "",
   ].filter(Boolean).join("");
@@ -1298,37 +1197,31 @@ function render(d) {
   const col = i => hist.map(r => r[i]);
 
   $("cpuV").textContent = d.cpu.percent == null ? "–" : d.cpu.percent.toFixed(0) + "%";
-  $("cpuS").textContent = d.cpu.cores.length ? "per core: " + d.cpu.cores.map(c => c == null ? "–" : c.toFixed(0) + "%").join(" · ") : "";
+  $("cpuS").textContent = `load ${d.cpu.load[0].toFixed(2)} · ${h.nproc} vCPU`;
   spark($("cpuC"), T, [{ values: col(1), color: "var(--s1)" }], { max: 100, fmt: v => v == null ? "–" : v.toFixed(0) + "%", label: "CPU percent, last hour" });
 
-  const busy = d.idle ? d.idle.load_busy : null;
-  $("loadV").textContent = d.cpu.load[0].toFixed(2);
-  $("loadS").textContent = "5 min " + d.cpu.load[1].toFixed(2) + " · 15 min " + d.cpu.load[2].toFixed(2) +
-    (busy != null ? " · busy line " + busy.toFixed(2) : "");
-  spark($("loadC"), T, [{ values: col(2), color: "var(--s1)" }], { ref: busy, fmt: v => v == null ? "–" : v.toFixed(2), label: "Load average, last hour" });
-
+  // Swap only gets a mention when some is in use (the hibernation swapfile never counts)
   const m = d.memory;
+  const swapUsed = (d.swap || []).filter(s => !s.role.startsWith("hibernation")).reduce((a, s) => a + (s.used || 0), 0);
   $("memV").textContent = (m.used / m.total * 100).toFixed(0) + "%";
-  $("memS").textContent = bytes(m.used) + " used · " + bytes(m.available) + " available of " + bytes(m.total);
+  $("memS").textContent = bytes(m.used) + " of " + bytes(m.total) + (swapUsed ? " · swap " + bytes(swapUsed) : "");
   spark($("memC"), T, [{ values: col(3), color: "var(--s1)" }], { max: 100, fmt: v => v == null ? "–" : v.toFixed(0) + "%", label: "Memory used percent, last hour" });
 
-  $("disks").innerHTML = (d.disks || []).map(x => meterRow(x.mount, x.used, x.total, `<span>${esc(x.device)} · ${esc(x.fstype)}</span>`)).join("") || '<div class="note">No disks found</div>';
-  $("swap").innerHTML = (d.swap || []).map(s => {
-    if (s.role.startsWith("hibernation")) {
-      return `<div class="mrow"><div class="l"><span><b>${esc(s.name)}</b> ${esc(s.role)}</span><span>${bytes(s.size)}</span></div></div>`;
-    }
-    const extra = s.role === "zram" && s.compressed != null
-      ? `zram · ${bytes(s.orig_data)} stored as ${bytes(s.compressed)}` : esc(s.role) + (s.priority != null ? " · priority " + s.priority : "");
-    return meterRow(s.name, s.used, s.size, `<span>${extra}</span>`);
-  }).join("") || '<div class="note">No swap</div>';
+  // The headline is the fullest disk; every disk gets a meter underneath.
+  const disks = d.disks || [], pct = x => x.total ? x.used / x.total * 100 : 0;
+  const full = disks.reduce((a, x) => !a || pct(x) > pct(a) ? x : a, null);
+  $("diskV").textContent = full ? pct(full).toFixed(0) + "%" : "–";
+  $("diskS").textContent = full ? `${bytes(full.total - full.used)} free on ${full.mount}` : "No disks found";
+  $("disks").innerHTML = disks.map(x => meterRow(x.mount, x.used, x.total, `${x.device} · ${x.fstype}`)).join("");
 
   $("topCpu").innerHTML = procTable(d.processes.top_cpu, "cpu");
   $("topMem").innerHTML = procTable(d.processes.top_mem, "rss");
 
-  $("ports").innerHTML = (d.ports && d.ports.length) ? `<table class="tbl"><colgroup><col style="width:160px"><col style="width:70px"><col style="width:70px"><col style="width:72px"><col><col style="width:52px"></colgroup>
-    <thead><tr><th>Address</th><th class="num">Port</th><th class="num">PID</th><th>User</th><th>Command</th><th></th></tr></thead><tbody>` +
-    d.ports.map(p => `<tr class="open" data-url="${portUrl(p.port)}" title="Open ${portUrl(p.port)} in a new tab"><td>${esc(p.addr)}</td><td class="num"><a href="${portUrl(p.port)}" target="_blank" rel="noopener">${p.port}</a></td><td class="num">${p.pid || "–"}</td><td>${esc(p.user || "–")}</td>
-      <td class="cmd" title="${esc(p.cmd || "")}">${p.cmd ? esc(p.cmd) : '<span style="color:var(--muted)">owned by another user</span>'}</td>
+  $("ports").innerHTML = (d.ports && d.ports.length) ? `<table class="tbl">
+    <thead><tr><th class="num" style="width:64px">Port</th><th>Process</th><th style="width:52px"></th></tr></thead><tbody>` +
+    d.ports.map(p => `<tr class="open" data-url="${portUrl(p.port)}" title="${esc(`Open ${portUrl(p.port)} in a new tab\nListening on ${p.addr}${p.pid ? " · pid " + p.pid : ""}${p.user ? " · " + p.user : ""}`)}">
+      <td class="num"><a href="${portUrl(p.port)}" target="_blank" rel="noopener">${p.port}</a></td>
+      <td class="cmd">${p.cmd ? esc(p.cmd) : '<span class="dim">owned by another user</span>'}</td>
       <td class="num">${p.pid ? stopButton(p.pid, p.start, p.user, `${p.cmd} (port ${p.port})`) : ""}</td></tr>`).join("") +
     "</tbody></table>" : '<div class="note">None</div>';
 }
