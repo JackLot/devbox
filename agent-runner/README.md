@@ -21,7 +21,7 @@ plus `gh` and `claude`, both logged in.
 | `agent-wip` | A run is working on it | Wait |
 | `agent-pr` | PR opened or updated, or a follow-up question answered in a comment | Review; for changes or questions, comment on the issue and re-add `agent` |
 | `agent-needs-human` | Blocked; the agent's question is in an issue comment | Answer in a comment, re-add `agent` |
-| `agent-failed` | Run errored or made no commits; see the issue comment | Fix the issue text or the runner, re-add `agent` |
+| `agent-failed` | Run errored, made no commits, or couldn't push or open the PR; the issue comment says why and gives a `cd` command for the worktree | Fix the issue text or the runner, re-add `agent` |
 
 Re-adding `agent` to an issue whose `agent/issue-N` branch already exists resumes on that branch
 with the full comment thread, and pushes to the open PR instead of opening a new one. If the
@@ -63,7 +63,10 @@ edit the "Making decisions" section of the prompt in `agent-runner`.
 5. `claude -p` with the issue title, body and comments. It can edit files, run project
    tooling and commit, but can't push (see `ALLOWED_TOOLS` in the script).
 6. The script pushes any commits, then opens or updates the PR (`Closes #N`, the summary and
-   decisions), and sets the final label with a comment.
+   decisions), and sets the final label with a comment. If the push or the PR step fails
+   (for example, the token lacks the `workflow` scope and the branch touches
+   `.github/workflows/`), the issue gets `agent-failed` with the error. The commits stay in
+   the worktree, and the next run continues from them instead of resetting to origin.
 
 A lock file means runs never overlap.
 
