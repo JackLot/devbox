@@ -635,7 +635,7 @@ def claude_sessions(procs, rows):
 # agent-runner (../../agent-runner) keeps its state in ~/.agent-runner: a lock
 # held while a run is in progress, cron.log, one JSON log per issue run
 # (<repo>-<N>-<YYYYmmdd-HHMMSS>.json, empty until the run ends) and a worktree
-# per open issue. The run's Claude session is also in the Claude sessions card;
+# per open issue. The run's Claude session is also in the Agent sessions card;
 # here it's matched by cwd to show what the current run is doing.
 
 RUNNER_HOME = os.environ.get("AGENT_RUNNER_HOME") or os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".agent-runner")
