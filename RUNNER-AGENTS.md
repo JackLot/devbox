@@ -24,7 +24,7 @@ Read this before starting; add to it when you learn something a future run would
   `.get()`; `.get()` alone returns `{}`). Write that
   harness to `/tmp/*.js` with the Write tool (a Bash heredoc containing `{"` is refused), and
   make the stub element's `querySelector` return an object, or `spark()` and `bindModal()` throw; stub
-  `removeAttribute` and `matches` too. The sampled snapshot may have no `runner`
+  `removeAttribute` and `matches` too, and give `document` a `documentElement`. The sampled snapshot may have no `runner`
   issues, so to exercise the issue modal inject a fake `runner` (`issues`, `runs`, `home`)
   and call `openIssue("repo#N")`; `openMetric("cpu")`, `await openRun("<log name>")` and
   `openSessionLog(sid)` + `await fetchSessionLog()` cover the other modals. One history row
@@ -57,21 +57,32 @@ Read this before starting; add to it when you learn something a future run would
   unstaged edits. Check this even when the newest comment asks for nothing new: a re-run with
   no new requests can mean they saved tweaks after your last push (compare entry timestamps
   with the last commit time).
+- To test `agent-runner/agent-runner` without touching GitHub: `bash -n` it from a `python3`
+  subprocess; run `--dry-run` with `AGENT_RUNNER_HOME` set to a `/tmp` dir whose `repos` lists
+  `/home/dev/devbox`; and put a fake `gh` (a script that serves JSON fixtures through `jq`
+  and `exec`s the real one otherwise) first on `PATH` to fake labels or reviews.
+- Scripts that `ec2/bootstrap.sh` installs (`devbox-idle-check`, `devbox-idle`) are heredocs in
+  it and need root paths. To test one, pull the heredoc out with a Python regex, replace the
+  `/var/lib/...`, `/var/log/...` and `/etc/devbox/...` paths with a temp dir and `logger` with
+  `true`, write it out and run it (`bash -n <file>` works from a `python3` subprocess). Changes
+  there only reach the box when the reviewer re-runs `bootstrap.sh` over SSM (and
+  `dashboard/install.sh` for the service unit); say so in the summary.
+
 ## Letting the reviewer check your change
 
-- For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. End the
-  summary with a single copy-paste command that runs the dashboard from your worktree on port
-  9998, next to the real one on 9999:
+- For changes to `ec2/dashboard/`, the reviewer wants to try the branch in a browser. Under
+  `### Audit`, give a single copy-paste command that runs the dashboard from your worktree on
+  port 9998, next to the real one on 9999:
 
   ```bash
   nohup python3 ~/.agent-runner/worktrees/devbox-<N>/ec2/dashboard/server.py --port 9998 > /tmp/devbox-dashboard-issue<N>.log 2>&1 < /dev/null & disown
   ```
 
   The code block must hold only that command (the reviewer copies it with the copy button
-  and pastes it straight into a terminal; a `#` comment line breaks that). Put the URL
-  (http://devbox:9998) and the stop command (`pkill -f 'server.py --port 9998'`) in prose
-  or their own code blocks. Use your actual worktree path (your working directory); it stays in place until the issue
-  is closed. Warn that the test dashboard's **Hibernate now** and Stop buttons are live.
+  and pastes it straight into a terminal; a `#` comment line breaks that). Follow it
+  with just "Then open http://devbox:9998": the reviewer cut the stop command and the
+  warning about live Hibernate/Stop buttons from their rewrite. Use your actual worktree
+  path (your working directory); it stays in place until the issue is closed.
 - The reviewer pastes that command into an ssh session on the devbox, which can't open a
   browser tab, so don't add an auto-open step (`open`, `xdg-open`, or wrapping it in
   `ssh devbox ... && open ...` from the laptop); they tried it and asked for it to be reverted.

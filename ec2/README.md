@@ -15,6 +15,7 @@ Start with [CHECKLIST.md](CHECKLIST.md) to launch and verify one.
 | Dev servers | Bind to `0.0.0.0`, browse `http://devbox:<port>` from any tailnet device |
 | Admin access | `devbox ssm`: SSM Session Manager shell (`ssm-user`, has sudo), IAM-authenticated, no port 22 needed |
 | Idle cost | `devbox-idle.timer` checks every 5 min; after 60 idle min it calls `ec2:StopInstances --hibernate` on itself |
+| Pausing auto-hibernate | `devbox-idle pause` on the box, or **Pause auto-hibernate** in the dashboard's auto-hibernate modal; `devbox-idle resume` or the same button turns it back on. The pause is a flag file (`/var/lib/devbox-activity/paused`) the idle checker looks for, and lasts until resumed, also across hibernation and reboots. **Hibernate now** and `devbox down` still work while paused |
 | Waking up | `ssh devbox` runs `laptop/devbox proxy`, which signs in to SSO if the session expired (browser), starts the instance if needed and waits for sshd |
 | "Active" means | Claude Code heartbeat (managed hooks) in the last 5 min, an SSH session, or 5-min load above 25% of cores |
 | Memory | zram (priority 100) then `/pagefile` (priority 10). `/swap` is owned by `ec2-hibinit-agent` for the hibernation image only; no other swap may have `/swap` in its path (the agent substring-matches it) |
@@ -54,6 +55,7 @@ On the instance, the bootstrap installs:
 | Path | What |
 |---|---|
 | `/usr/local/bin/devbox-idle-check` | Idle detector and self-hibernate |
+| `/usr/local/bin/devbox-idle` | `pause`, `resume`, `status`: pause switch for auto-hibernate (runs as `dev`) |
 | `/var/log/devbox-idle.log` | Idle checker decisions (plus dashboard hibernations), mode 664 group `dev` (also in `journalctl -t devbox-idle`, which `dev` can't read) |
 | `/etc/devbox/idle.conf` | `IDLE_MINUTES`, `IDLE_HIBERNATE=on/off` (not overwritten on re-run) |
 | `/etc/claude-code/managed-settings.d/50-devbox-heartbeat.json` | Hooks that touch `/var/lib/devbox-activity/claude` |

@@ -69,6 +69,8 @@ ProtectHome=read-only
 PrivateTmp=yes
 # The Hibernate button logs to the idle checker's log ("-": fine if absent)
 ReadWritePaths=-/var/log/devbox-idle.log
+# The pause button creates and removes the idle checker's pause flag
+ReadWritePaths=-/var/lib/devbox-activity
 
 [Install]
 WantedBy=multi-user.target

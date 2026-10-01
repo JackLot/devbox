@@ -301,6 +301,7 @@ fi
 
 CHECK_INTERVAL_MIN=5                  # must match devbox-idle.timer
 HEARTBEAT_DIR=/var/lib/devbox-activity
+PAUSE_FILE=$HEARTBEAT_DIR/paused      # exists while paused (devbox-idle, dashboard)
 STATE_FILE=/var/lib/devbox-idle/count # consecutive idle checks
 note() { logger -t devbox-idle "$*"; echo "$(date -u +%FT%TZ) $*" >> /var/log/devbox-idle.log; }
 LOAD_BUSY=$(awk -v n="$(nproc)" 'BEGIN { print n * 0.25 }')
@@ -309,7 +310,7 @@ idle_checks=$(( (IDLE_MINUTES + CHECK_INTERVAL_MIN - 1) / CHECK_INTERVAL_MIN ))
 # Prints the reason and returns 0 if anything counts as activity.
 is_active() {
   # Claude Code hooks touch HEARTBEAT_DIR; +1 min absorbs timer jitter
-  if [[ -n "$(find "$HEARTBEAT_DIR" -type f -mmin "-$((CHECK_INTERVAL_MIN + 1))" -print -quit)" ]]; then
+  if [[ -n "$(find "$HEARTBEAT_DIR" -type f ! -name paused -mmin "-$((CHECK_INTERVAL_MIN + 1))" -print -quit)" ]]; then
     echo "agent heartbeat"; return 0
   fi
 
@@ -335,6 +336,13 @@ is_active() {
 if [[ "$IDLE_HIBERNATE" != on ]]; then
   echo 0 > "$STATE_FILE"
   note "auto-hibernate disabled in /etc/devbox/idle.conf"
+  exit 0
+fi
+
+# Paused with `devbox-idle pause` or the dashboard, until resumed
+if [[ -e "$PAUSE_FILE" ]]; then
+  echo 0 > "$STATE_FILE"
+  note "auto-hibernate paused (resume: devbox-idle resume, or the dashboard)"
   exit 0
 fi
 
@@ -372,6 +380,27 @@ aws ec2 stop-instances --hibernate \
 EOF
 
 chmod 755 /usr/local/bin/devbox-idle-check
+
+# Pause switch for the dev user; the dashboard's button sets the same flag.
+cat > /usr/local/bin/devbox-idle <<'EOF'
+#!/usr/bin/env bash
+
+# Pauses or resumes idle auto-hibernation: devbox-idle pause | resume | status
+# The pause lasts until resumed (also across hibernation and reboots).
+set -euo pipefail
+
+PAUSE_FILE=/var/lib/devbox-activity/paused
+note() { logger -t devbox-idle "$*"; echo "$(date -u +%FT%TZ) $*" >> /var/log/devbox-idle.log; echo "$*"; }
+
+case ${1:-status} in
+  pause)  touch "$PAUSE_FILE"; note "auto-hibernate paused via devbox-idle" ;;
+  resume) rm -f "$PAUSE_FILE"; note "auto-hibernate resumed via devbox-idle" ;;
+  status) [[ -e "$PAUSE_FILE" ]] && echo "auto-hibernate is paused" || echo "auto-hibernate is on" ;;
+  *) echo "usage: devbox-idle pause|resume|status" >&2; exit 2 ;;
+esac
+EOF
+
+chmod 755 /usr/local/bin/devbox-idle
 
 cat > /etc/systemd/system/devbox-idle.service <<'EOF'
 [Unit]

@@ -11,6 +11,8 @@
 # To continue after agent-needs-human, answer in an issue comment and re-add "agent".
 # Re-adding "agent" to an issue whose branch already exists resumes on that branch
 # (and updates its open PR), so it also works for follow-up changes or questions.
+# Adding "agent" to that PR, or submitting a code review on it, does the same: the run
+# is for the PR's issue, and gets the PR's discussion and review comments too.
 #
 # Each issue's worktree (~/.agent-runner/worktrees/<repo>-<N>) is kept until the issue
 # is closed. Agents read and extend RUNNER-AGENTS.md in each repo with what they learn.
@@ -26,6 +28,7 @@ STATE_DIR="${AGENT_RUNNER_HOME:-$HOME/.agent-runner}"
 CONFIG="$STATE_DIR/repos"
 WORKTREE_ROOT="$STATE_DIR/worktrees"
 LOG_DIR="$STATE_DIR/logs"
+REVIEWS_SEEN="$STATE_DIR/reviews-seen"
 
 # Issue labels. The trigger is the one you add by hand; the rest are created on the
 # first run and set by this script.
@@ -53,9 +56,9 @@ RESULT_SCHEMA='{
   "type": "object",
   "properties": {
     "status": {"type": "string", "enum": ["done", "needs_human"]},
-    "summary": {"type": "string", "description": "What changed and how it was verified (markdown)"},
-    "decisions": {"type": "array", "items": {"type": "string"}, "description": "Judgment calls made where the issue was ambiguous"},
-    "question": {"type": "string", "description": "When needs_human: what is blocked and the specific question(s) to answer"}
+    "summary": {"type": "string", "description": "PR description (markdown), laid out as the prompt says: what the reviewer must act on above the fold, the log of the work below it"},
+    "decisions": {"type": "array", "items": {"type": "string"}, "description": "Judgment calls made where the issue was ambiguous, each a terse fragment"},
+    "question": {"type": "string", "description": "When needs_human: the specific question(s) to answer, question first, a few lines at most"}
   },
   "required": ["status", "summary"]
 }'
@@ -98,11 +101,95 @@ failure_reason() { # <command output>
   fi
 }
 
+# Reviews a run has already been given, one "<repo>#<pr> <review id>" per line, so a
+# submitted review triggers one run, not one per tick.
+review_seen() { # <repo> <pr number> <review id>
+  [[ -f "$REVIEWS_SEEN" ]] && grep -qxF "$1#$2 $3" "$REVIEWS_SEEN"
+}
+
+# The issues whose open PR asks for a run: one "<issue number> <reason>" line per PR
+# that carries the trigger label or has a submitted review no run has seen yet.
+# Only PRs on this script's own agent/issue-N branches count; the branch names the issue.
+pr_triggers() { # <repo>
+  local repo=$1 issue pr kind id
+  # Reviews by people with write access only, like the label. A bare approval asks for nothing.
+  gh pr list -R "$repo" --state open --limit 100 --json number,headRefName,labels,reviews --jq "
+    .[] | select(.headRefName | test(\"^agent/issue-[0-9]+\$\"))
+    | (.headRefName | ltrimstr(\"agent/issue-\")) as \$issue | .number as \$pr
+    | (select([.labels[].name] | index(\"$LABEL_TRIGGER\")) | [\$issue, \$pr, \"label\", \"-\"]),
+      (.reviews[]
+        | select(.authorAssociation == \"OWNER\" or .authorAssociation == \"MEMBER\" or .authorAssociation == \"COLLABORATOR\")
+        | select(.state == \"COMMENTED\" or .state == \"CHANGES_REQUESTED\" or (.state == \"APPROVED\" and .body != \"\"))
+        | [\$issue, \$pr, \"review\", .id])
+    | @tsv" |
+  while IFS=$'\t' read -r issue pr kind id; do
+    if [[ $kind == label ]]; then
+      echo "$issue '$LABEL_TRIGGER' label on PR #$pr"
+    elif ! review_seen "$repo" "$pr" "$id"; then
+      echo "$issue code review on PR #$pr"
+    fi
+  done | sort -u -k1,1n
+}
+
+# An open PR's discussion, reviews and inline review threads as markdown for the prompt.
+# Reviews no earlier run was given are marked as new. Draft (pending) reviews and their
+# comments are visible to this token but not submitted yet, so they are left out.
+pr_context() { # <repo> <pr number>
+  local repo=$1 pr=$2 seen=""
+  [[ -f "$REVIEWS_SEEN" ]] && seen=$(grep -F "$repo#$pr " "$REVIEWS_SEEN" | cut -d' ' -f2 || true)
+  # shellcheck disable=SC2016  # the $variables belong to GraphQL and jq
+  gh api graphql -f owner="${repo%/*}" -f name="${repo#*/}" -F number="$pr" -f query='
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+        url
+        comments(last: 100) { nodes { author { login } body createdAt } }
+        reviews(last: 100) { nodes { id author { login } state body submittedAt } }
+        reviewThreads(last: 100) { nodes {
+          isResolved isOutdated path line originalLine
+          comments(first: 50) { nodes { author { login } body state createdAt diffHunk } }
+        } }
+      } }
+    }' | jq -r --arg seen "$seen" '
+    ($seen | split("\n")) as $seen
+    | .data.repository.pullRequest
+    | [.reviews.nodes[] | select(.state != "PENDING")] as $reviews
+    | [.reviewThreads.nodes[]
+        | .comments.nodes |= map(select(.state != "PENDING"))
+        | select(.comments.nodes | length > 0)] as $threads
+    | "# Pull request for this issue\n\(.url)\n\n"
+      + ([.comments.nodes[] | "## PR comment by \(.author.login) (\(.createdAt))\n\(.body)"] | join("\n\n"))
+      + "\n\n"
+      + ([$reviews[]
+          | "## Code review by \(.author.login) (\(.submittedAt), \(.state | ascii_downcase | gsub("_"; " ")))"
+            + (if .id as $id | $seen | index($id) then "" else " [new since the last run]" end)
+            + "\n" + (if .body == "" then "(no summary; see the inline comments)" else .body end)]
+        | join("\n\n"))
+      + "\n\n"
+      + ([$threads[]
+          | "## Inline review thread on \(.path)"
+            + (if (.line // .originalLine) then ":\(.line // .originalLine)" else "" end)
+            + (if .isResolved then " [resolved]" else "" end)
+            + (if .isOutdated then " [outdated: the code has changed since]" else "" end)
+            + "\n```diff\n" + (.comments.nodes[0].diffHunk | split("\n") | .[-6:] | join("\n")) + "\n```\n"
+            + ([.comments.nodes[] | "\(.author.login) (\(.createdAt)): \(.body)"] | join("\n\n"))]
+        | join("\n\n"))'
+}
+
+# Record every submitted review on a PR as seen (called when a run picks the PR up).
+mark_reviews_seen() { # <repo> <pr number>
+  local repo=$1 pr=$2 id
+  gh pr view "$pr" -R "$repo" --json reviews --jq '.reviews[] | select(.state != "PENDING") | .id' |
+  while read -r id; do
+    review_seen "$repo" "$pr" "$id" || echo "$repo#$pr $id" >>"$REVIEWS_SEEN"
+  done
+}
+
 process_issue() {
 
   # Take in the arguments and set variables
   # $1 = first arg given, $2 = second arg given, etc.
-  local dir=$1 repo=$2 base=$3 links=$4 number=$5
+  # $6 is set when the run was asked for on the issue's PR (label or code review)
+  local dir=$1 repo=$2 base=$3 links=$4 number=$5 pr_reason=${6:-}
   local name branch wt logfile
   name=$(basename "$dir")
   branch="agent/issue-$number"
@@ -127,20 +214,35 @@ process_issue() {
   # If the dry run flag is set, log the dry run message and return
   # without actually doing anything
   if $DRY_RUN; then
-    log "[dry-run] would implement $repo#$number: $title (branch $branch from $start)"
+    log "[dry-run] would implement $repo#$number: $title (branch $branch from $start)${pr_reason:+, triggered by $pr_reason}"
     return
   fi
 
   # Add the $LABEL_WIP label to the issue and remove the trigger label
-  log "Picking up $repo#$number: $title (from $start)"
+  log "Picking up $repo#$number: $title (from $start)${pr_reason:+, triggered by $pr_reason}"
   gh issue edit "$number" -R "$repo" --add-label "$LABEL_WIP" \
     --remove-label "$LABEL_TRIGGER" --remove-label "$LABEL_NEEDS_HUMAN" --remove-label "$LABEL_FAILED" >/dev/null
 
+  # The issue's open PR, if it has one. Every run gets its discussion and reviews, so
+  # whatever triggered this run, the PR's own triggers are used up: drop its label and
+  # remember its reviews.
+  local pr_number pr_thread=""
+  pr_number=$(gh pr list -R "$repo" --head "$branch" --state open --json number --jq '.[0].number // empty')
+  if [[ -n "$pr_number" ]]; then
+    pr_thread=$(pr_context "$repo" "$pr_number") || log "Couldn't read PR #$pr_number of $repo"
+    gh pr edit "$pr_number" -R "$repo" --remove-label "$LABEL_TRIGGER" >/dev/null 2>&1 || true
+    mark_reviews_seen "$repo" "$pr_number" || true
+  fi
+
   # Define a function to finish the issue by removing the '$LABEL_WIP' label and
-  # adding the given label and commenting on the issue
+  # adding the given label and commenting on the issue. A run asked for on the PR
+  # reports there too, since that's where the reviewer is looking.
   finish() { # <label> <comment>
     gh issue edit "$number" -R "$repo" --remove-label "$LABEL_WIP" --add-label "$1" >/dev/null
     gh issue comment "$number" -R "$repo" --body "$2" >/dev/null
+    if [[ -n "$pr_reason" && -n "$pr_number" && "$2" != "🤖 Updated "* ]]; then
+      gh pr comment "$pr_number" -R "$repo" --body "$2" >/dev/null || true
+    fi
   }
 
   # The worktree lives until the issue is closed (see cleanup_worktrees), so installed
@@ -190,6 +292,15 @@ This branch already has earlier work on this issue (see git log). Continue from 
 issue comments may answer questions from a previous run or ask for changes. If the newest
 comments ask a question or ask for something other than code changes, answer them in
 \"summary\" (it is posted as your reply); no commit is needed in that case."
+  [[ -n "$pr_thread" ]] && resume_note="
+$pr_thread
+$resume_note
+
+The pull request's discussion, code reviews and inline review threads above are the reviewer's
+feedback on the implementation; the issue stays the source of truth for what to build. Action
+the feedback that later commits haven't already dealt with (compare the timestamps with git
+log; resolved threads are done), the same way you would a new issue comment.${pr_reason:+
+This run was triggered by: $pr_reason.}"
 
   # Define the prompt passed to the implementing agent (a heredoc, so quotes need no escaping)
   local prompt
@@ -219,7 +330,8 @@ Instructions:
   a tool or permission limit, a command that doesn't work here, how the reviewer wants to
   verify changes), add it to RUNNER-AGENTS.md at the repo root (create it if missing) and
   commit it. Keep entries short and specific; update an existing entry instead of adding a
-  near-duplicate. Only runner-specific learnings belong there, not general docs.
+  near-duplicate. Only runner-specific learnings belong there, not general docs, and nothing
+  this prompt already tells you.
 
 Making decisions:
 - Bias strongly toward deciding and finishing. When the issue is ambiguous or leaves details
@@ -234,6 +346,36 @@ Making decisions:
   behavior) the issue doesn't settle.
 - If you return needs_human, commit any useful progress first, and put specific,
   answerable questions in "question" (with your recommended answer where you have one).
+
+Writing "summary", "decisions" and "question":
+The reviewer reads these on GitHub, busy and distracted, and reads the diff themselves.
+Write for skimming: what they have to act on comes first, your log of the work goes below
+the fold. Lay out "summary" in this order:
+1. One or two sentences saying what the change does. No heading, and no "Closes #N" line
+   (the runner adds it).
+2. "### Audit": the bare minimum the reviewer needs to check the change by hand: the
+   command to paste in a fenced code block, then what to open or look at. Leave the section
+   out if there is nothing to check by hand.
+3. Rarely, one more short section above the fold for anything else the reviewer must know
+   to review the change properly: a behavior change they wouldn't expect from the issue, a
+   risk, a part left undone, a step they have to take before merging. The bar is high: it
+   must be actionable and consequential for the review. If in doubt it goes below the fold.
+4. The fold: a line "<br />" followed by a line "<hr />".
+5. "### Code changes": one bullet per file or area touched.
+6. "### Agent-run verification": what you ran, and what you could not check.
+The runner appends "decisions" last, under "### Agent decisions", so don't repeat them in
+"summary".
+
+- Below the fold and in "decisions", write stripped-down fragments, dropping articles and
+  filler where the meaning survives: "Link opens new tab, hardcoded to <url>", not "The link
+  opens in a new tab so that the live dashboard stays open".
+- Don't explain what anyone who knows the technology already knows, and don't justify a
+  decision unless the reason is surprising.
+- Say each thing once, and scale to the change: a one-line fix gets a sentence above the
+  fold and a line or two below it.
+- "question", and a "summary" that only answers a comment, are posted as issue comments:
+  put the question or the answer in the first line, then only the context needed to act on
+  it. No sections.
 
 Your final response must match the output schema: "summary" becomes the PR description.
 EOF
@@ -257,7 +399,8 @@ EOF
   decisions=$(jq -r '.structured_output.decisions // [] | map("- " + .) | join("\n")' "$logfile" 2>/dev/null || true)
   question=$(jq -r '.structured_output.question // empty' "$logfile" 2>/dev/null || true)
   [[ -n "$decisions" ]] && decisions="
-**Decisions made** (push back on the PR if any are wrong):
+### Agent decisions
+*push back on the PR if any are wrong*
 $decisions"
 
   # Appended to failure comments: a command the reviewer can paste to land in the worktree
@@ -327,7 +470,7 @@ $decisions" 2>&1) || failed=true
     else
       verb=Opened
       out=$(gh pr create -R "$repo" --base "$base" --head "$branch" --title "$title" \
-        --body "Closes #$number
+        --body "Closes #$number.
 
 $summary
 $decisions" 2>&1) || failed=true
@@ -385,9 +528,19 @@ while read -r dir links <&3; do
     --json number,labels \
     --jq ".[] | select([.labels[].name] | index(\"$LABEL_WIP\") | not) | .number")
 
-  (( ${#numbers[@]} )) || { log "$repo: no issues labeled '$LABEL_TRIGGER'"; continue; }
+  # Plus issues whose PR asks for a run: the trigger label on the PR, or a new code review.
+  # Skipped while the issue is agent-wip, like the label on the issue itself.
+  mapfile -t wip < <(gh issue list -R "$repo" --state all --label "$LABEL_WIP" --json number --jq '.[].number')
+  declare -A pr_reasons=()
+  while read -r n reason; do
+    [[ -n "$n" && " ${wip[*]} " != *" $n "* ]] || continue
+    pr_reasons[$n]=$reason
+    [[ " ${numbers[*]} " == *" $n "* ]] || numbers+=("$n")
+  done < <(pr_triggers "$repo")
+
+  (( ${#numbers[@]} )) || { log "$repo: no issues or PRs labeled '$LABEL_TRIGGER', no new code reviews"; continue; }
 
   for n in "${numbers[@]}"; do
-    process_issue "$dir" "$repo" "$base" "$links" "$n" || log "Error processing $repo#$n"
+    process_issue "$dir" "$repo" "$base" "$links" "$n" "${pr_reasons[$n]:-}" || log "Error processing $repo#$n"
   done
 done 3< "$CONFIG"

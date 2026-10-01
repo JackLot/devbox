@@ -36,6 +36,7 @@ IDLE_CONF = "/etc/devbox/idle.conf"
 IDLE_COUNT = "/var/lib/devbox-idle/count"
 IDLE_LOG = "/var/log/devbox-idle.log"
 HEARTBEAT_DIR = "/var/lib/devbox-activity"
+PAUSE_FILE = os.path.join(HEARTBEAT_DIR, "paused")  # exists while auto-hibernate is paused
 IDLE_INTERVAL_MIN = 5  # must match devbox-idle.timer
 
 REAL_FS = {"xfs", "ext4", "ext3", "btrfs", "vfat", "zfs", "f2fs"}
@@ -304,6 +305,8 @@ def idle_state():
 
     heartbeat = None
     for name in safe(os.listdir, HEARTBEAT_DIR) or []:
+        if name == os.path.basename(PAUSE_FILE):
+            continue
         mtime = safe(os.path.getmtime, os.path.join(HEARTBEAT_DIR, name))
         if mtime and (heartbeat is None or mtime > heartbeat):
             heartbeat = mtime
@@ -325,12 +328,16 @@ def idle_state():
                 awake_since = t  # first check after resume: within 5 min of waking
             last_status = {"time": t, "message": msg}
 
+    paused = os.path.exists(PAUSE_FILE)
     hibernate_at = None
-    if conf["IDLE_HIBERNATE"] == "on" and next_check:
+    if conf["IDLE_HIBERNATE"] == "on" and not paused and next_check:
         hibernate_at = next_check + max(0, needed - count - 1) * IDLE_INTERVAL_MIN * 60
 
     return {
         "enabled": conf["IDLE_HIBERNATE"] == "on",
+        "paused": paused,
+        # Checkers installed before the pause flag existed would ignore it
+        "pause_supported": "PAUSE_FILE" in (safe(read, IDLE_CHECK) or ""),
         "idle_minutes": minutes,
         "count": count,
         "needed": needed,
@@ -757,13 +764,34 @@ def github_state(conf):
             issues = gh_json(["issue", "list", "-R", slug, "--state", "open", "--limit", "200",
                               "--json", "number,title,url,labels,updatedAt"], conf["path"])
             prs = gh_json(["pr", "list", "-R", slug, "--state", "open", "--limit", "100",
-                           "--json", "number,url,isDraft,headRefName"], conf["path"])
+                           "--json", "number,url,isDraft,headRefName,labels,reviews"], conf["path"])
         except Exception as e:
             out["error"] = "%s: %s" % (slug, e)
             continue
-        out["repos"][name] = {"issues": issues,
-                              "prs": {p["headRefName"]: p for p in prs if p["headRefName"].startswith("agent/issue-")}}
+        seen = set((safe(read, os.path.join(RUNNER_HOME, "reviews-seen")) or "").splitlines())
+        agent_prs = {}
+        for p in prs:
+            if p["headRefName"].startswith("agent/issue-"):
+                p["trigger"] = pr_trigger(slug, p, seen)
+                del p["labels"], p["reviews"]
+                agent_prs[p["headRefName"]] = p
+        out["repos"][name] = {"issues": issues, "prs": agent_prs}
     return out
+
+
+def pr_trigger(slug, pr, seen):
+    """Why the runner's next tick will pick this PR's issue up, if it will: the
+    trigger label on the PR or a code review no run has been given yet (the same
+    rules as pr_triggers in agent-runner)."""
+    if any(lb.get("name") == "agent" for lb in pr.get("labels") or []):
+        return "label"
+    for r in pr.get("reviews") or []:
+        if (r.get("authorAssociation") in ("OWNER", "MEMBER", "COLLABORATOR")
+                and (r.get("state") in ("COMMENTED", "CHANGES_REQUESTED")
+                     or (r.get("state") == "APPROVED" and r.get("body")))
+                and "%s#%d %s" % (slug, pr["number"], r.get("id")) not in seen):
+            return "review"
+    return None
 
 
 def session_title(session_id):
@@ -849,12 +877,17 @@ def open_issues(conf, github, worktrees, last_run):
             names = {lb["name"] for lb in labels}
             state = next((st for lb, st in AGENT_LABELS if lb in names), None)
             key = (name, i["number"])
+            pr = data["prs"].get("agent/issue-%d" % i["number"])
+            # Queued from the PR (its label or a new code review) rather than the issue
+            queued_by = pr and pr.get("trigger")
+            if queued_by and state != "wip":
+                state = "queued"
             if not state and key not in wt_by:
                 continue
             seen.add(key)
             rows.append({"repo": name, "issue": i["number"], "title": i.get("title"), "url": i.get("url"),
-                         "labels": labels, "state": state, "updated": i.get("updatedAt"),
-                         "pr": data["prs"].get("agent/issue-%d" % i["number"])})
+                         "labels": labels, "state": state, "updated": i.get("updatedAt"), "pr": pr,
+                         "queued_by": queued_by if state == "queued" else None})
     for w in worktrees:
         key = (w["repo"], w["issue"])
         if key in seen:
@@ -863,7 +896,7 @@ def open_issues(conf, github, worktrees, last_run):
         # tick), or GitHub couldn't be reached for this repo.
         rows.append({"repo": w["repo"], "issue": w["issue"], "title": w["title"], "url": w["url"],
                      "labels": None, "state": "closed" if w["repo"] in github["repos"] else None,
-                     "updated": None, "pr": None})
+                     "updated": None, "pr": None, "queued_by": None})
     order = {st: n for n, (_, st) in enumerate(AGENT_LABELS)}
     rows.sort(key=lambda r: r["updated"] or "", reverse=True)
     rows.sort(key=lambda r: order.get(r["state"], len(order)))
@@ -1229,6 +1262,27 @@ def hibernate(instance, dry_run=False):
     return 200, "hibernating"
 
 
+def set_idle_pause(paused):
+    """Creates or removes the flag the idle checker looks for before it counts
+    idleness; `devbox-idle pause|resume` on the box does the same."""
+    try:
+        if paused:
+            open(PAUSE_FILE, "a").close()
+        elif os.path.exists(PAUSE_FILE):
+            os.remove(PAUSE_FILE)
+    except OSError as e:
+        return 500, ("can't change %s: %s. Re-run ec2/dashboard/install.sh (ssm) so the "
+                     "service may write there" % (PAUSE_FILE, e))
+    msg = "auto-hibernate %s via dashboard" % ("paused" if paused else "resumed")
+    try:  # best effort: the flag is what counts
+        with open(IDLE_LOG, "a") as f:
+            f.write("%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), msg))
+    except OSError:
+        pass
+    print(msg, flush=True)
+    return 200, msg
+
+
 # ---- http ---------------------------------------------------------------------
 
 STATIC_FILE = re.compile(r"^[a-z][a-z0-9_-]*\.(css|js)\Z")
@@ -1307,7 +1361,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/stop", "/api/hibernate"):
+        if path not in ("/api/stop", "/api/hibernate", "/api/idle-pause"):
             return self.send(404, b"not found\n", "text/plain")
         refused = self.refuse_foreign()
         if refused:
@@ -1319,6 +1373,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, "expected a JSON body")
         if path == "/api/hibernate":
             return self.reply(*hibernate(self.sampler.instance, dry_run=body.get("dry_run") is True))
+        if path == "/api/idle-pause":
+            if not isinstance(body.get("paused"), bool):
+                return self.reply(400, "expected JSON {paused: true|false}")
+            code, message = set_idle_pause(body["paused"])
+            if code == 200:
+                safe(self.sampler.sample)  # the page re-polls right after
+            return self.reply(code, message)
         try:
             pid, start = int(body["pid"]), int(body["start"])
         except (KeyError, TypeError, ValueError):

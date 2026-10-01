@@ -19,7 +19,7 @@ plus `gh` and `claude`, both logged in.
 |---|---|---|
 | `agent` | Queue this issue (create it yourself; the rest are created on the first run) | Add it |
 | `agent-wip` | A run is working on it | Wait |
-| `agent-pr` | PR opened or updated, or a follow-up question answered in a comment | Review; for changes or questions, comment on the issue and re-add `agent` |
+| `agent-pr` | PR opened or updated, or a follow-up question answered in a comment | Review; for changes or questions, comment on the issue and re-add `agent`, or [give feedback on the PR](#feedback-on-the-pr) |
 | `agent-needs-human` | Blocked; the agent's question is in an issue comment | Answer in a comment, re-add `agent` |
 | `agent-failed` | Run errored, made no commits, or couldn't push or open the PR; the issue comment says why and gives a `cd` command for the worktree | Fix the issue text or the runner, re-add `agent` |
 
@@ -27,6 +27,28 @@ Re-adding `agent` to an issue whose `agent/issue-N` branch already exists resume
 with the full comment thread, and pushes to the open PR instead of opening a new one. If the
 follow-up only needs an answer (say, "how do I run this?"), the agent replies in an issue comment
 without committing and the issue goes back to `agent-pr`.
+
+## Feedback on the PR
+
+You don't have to go back to the issue to ask for changes. Either of these on an open
+`agent/issue-N` PR queues a run for issue N, the same as re-adding `agent` to the issue:
+
+- **Submit a code review** (comment or request changes, with or without inline comments; an
+  approval only counts if it has a summary). Each review triggers one run; the ones already
+  handed to a run are recorded in `~/.agent-runner/reviews-seen`. Replying to an inline thread
+  outside a review submits a one-comment review, so that triggers a run too.
+- **Add the `agent` label to the PR**, for comments left in the PR's discussion thread. The
+  runner removes the label when it picks the PR up.
+
+The run happens in the issue's worktree on the same branch, and the agent gets the issue thread
+plus the PR's discussion, reviews and inline review threads (with the diff lines they're on;
+resolved and outdated threads are marked, reviews it hasn't been given before are marked new).
+It pushes a revision to the PR as usual. Status labels still go on the issue only, but a run
+you asked for on the PR also posts its reply, question or failure as a PR comment.
+
+Reviews count only from people with write access to the repo (owner, member, collaborator),
+and draft reviews you haven't submitted are ignored. A PR on any other branch isn't picked up,
+labeled or not: the branch name is what ties a PR to its issue and worktree.
 
 ## RUNNER-AGENTS.md
 
@@ -41,7 +63,7 @@ it and commit it with their change, so it gets reviewed in the PR. See
 
 The prompt tells the agent to bias hard toward deciding: when the issue is ambiguous about
 details (naming, copy, layout, approach, edge cases) it picks what fits the existing code,
-finishes, and lists its judgment calls under **Decisions made** in the PR so they get reviewed
+finishes, and lists its judgment calls under **Agent decisions** in the PR so they get reviewed
 there. It returns `needs_human` only as a last resort: the goal is too unclear for any
 implementation to be likely right, it needs access or setup it doesn't have, or it faces an
 irreversible or high-risk choice (data deletion, breaking public APIs, security, billing) the
@@ -51,16 +73,24 @@ The agent reports its outcome through `--json-schema` structured output (`status
 `decisions`, `question`), so the script doesn't parse free text. To tune how readily it blocks,
 edit the "Making decisions" section of the prompt in `agent-runner`.
 
+PR descriptions and comments are written for skimming. Above the fold: a sentence or two on
+what the change does, then **Audit**, the steps to check it by hand, and (rarely) anything
+else the reviewer must know to review it properly. Below a rule, in
+stripped-down language: **Code changes**, **Agent-run verification** and **Agent decisions**.
+The layout and wording rules are the "Writing ..." section of the prompt.
+
 ## How a run works
 
-1. For each checkout in `~/.agent-runner/repos`, list open issues labeled `agent`.
+1. For each checkout in `~/.agent-runner/repos`, list open issues labeled `agent`, plus the
+   issues of open `agent/issue-N` PRs that are labeled `agent` or have a new code review.
 2. Swap the label to `agent-wip` so the next run doesn't pick it up again.
 3. Reuse or create the issue's worktree, `~/.agent-runner/worktrees/<repo>-N`, on the
    `agent/issue-N` branch at `origin/agent/issue-N` if it exists, otherwise at
    `origin/<default branch>`. The main checkout (and any interactive session in it) is untouched.
 4. Symlink the untracked files listed for that repo (`.env`, tokens, ...) from the main
    checkout into the worktree.
-5. `claude -p` with the issue title, body and comments. It can edit files, run project
+5. `claude -p` with the issue title, body and comments, and the open PR's discussion and
+   review comments if there is one. It can edit files, run project
    tooling and commit, but can't push (see `ALLOWED_TOOLS` in the script).
 6. The script pushes any commits, then opens or updates the PR (`Closes #N`, the summary and
    decisions), and sets the final label with a comment. If the push or the PR step fails
@@ -85,6 +115,7 @@ this public repo because it names private repos and the logs can contain secrets
   cron.log     # one line per run
   crontab      # copy of the installed cron entry, read by the dashboard
   logs/        # full JSON output of each issue run
+  reviews-seen # PR code reviews already handed to a run
   worktrees/   # <repo>-N checkouts of agent/issue-N, kept until the issue is closed
   lock
 ```
@@ -103,7 +134,9 @@ Set `AGENT_RUNNER_HOME` to use a different directory.
 
 The issue text is a prompt to an agent that runs shell commands next to your secrets. Adding a
 label needs triage/write access, so outsiders can't queue work, but read issues and comments
-someone else wrote before labeling (a resumed run reads every comment on the issue).
+someone else wrote before labeling (a resumed run reads every comment on the issue, and every
+comment and review on its PR). A code review only triggers a run when its author has write
+access, but once a run starts it reads the whole PR thread, whoever wrote it.
 
 ## Why local cron, not Claude routines
 
