@@ -1,5 +1,6 @@
 // System section: CPU / memory / disk tiles, the CPU and memory modal with
-// its top processes, listening ports, and the Stop buttons.
+// its top processes, the disk modal with the largest items, listening ports,
+// and the Stop buttons.
 
 // Stop buttons: only for processes the dashboard's own user owns (the server
 // can't signal anyone else's), including the dashboard itself.
@@ -99,6 +100,60 @@ document.querySelectorAll("[data-metric]").forEach(tile => {
   tile.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMetric(tile.dataset.metric); } };
 });
 
+// Disk modal: the tile's meters, then what takes up the most space. Sizing
+// every directory is slow, so the server only does it when this modal asks
+// (and keeps the answer for a minute); Rescan forces a fresh pass.
+const diskModal = $("diskModal");
+let diskUsage = null, diskError = null, diskBusy = false;
+function openDisk() {
+  if (!diskModal.open) diskModal.showModal();
+  loadDiskUsage(false);
+}
+async function loadDiskUsage(refresh) {
+  if (diskBusy) return;
+  diskBusy = true;
+  renderDiskUsage();
+  try {
+    const r = await fetch("api/disk-usage" + (refresh ? "?refresh=1" : ""), { cache: "no-store", headers: { "X-Dashboard": "1" } });
+    const d = await r.json().catch(() => ({ message: "HTTP " + r.status }));
+    if (!r.ok) throw new Error(d.message);
+    diskUsage = d; diskError = d.error;
+  } catch (e) {
+    diskError = e.message || "Couldn't reach the dashboard server.";
+  }
+  diskBusy = false;
+  renderDiskUsage();
+}
+function renderDiskUsage() {
+  const u = diskUsage;
+  $("diskRescan").disabled = diskBusy;
+  $("diskRescan").textContent = diskBusy ? "Measuring…" : "Rescan";
+  $("diskNote").textContent = diskError ? "Couldn't measure: " + diskError
+    : u ? `${home(u.root)} is ${bytes(u.total)} · measured ${hhmm(u.time)} in ${u.took.toFixed(1)}s` : "";
+  if (!u || !u.items.length) {
+    $("diskItems").innerHTML = `<div class="note">${diskBusy ? "Measuring… this can take a while on a full disk." : "Nothing measured."}</div>`;
+    return;
+  }
+  const rows = u.items.map(i => ({ size: i.size, kind: i.kind, title: i.path,
+    name: esc(i.path.startsWith(u.root + "/") ? "~" + i.path.slice(u.root.length) : i.path) }));
+  const max = rows[0].size || 1;
+  // Last and without a bar: it can't be broken down or cleaned up from here
+  if (u.other) {
+    rows.push({ size: u.other.size, kind: "", title: `Used on ${u.other.mount} minus ${u.root}: system files, other users`,
+      name: `<span class="dim">everything else on ${esc(u.other.mount)}</span>` });
+  }
+  $("diskItems").innerHTML = `<table class="tbl">
+    <thead><tr><th class="num" style="width:112px">Size</th><th>Path</th><th style="width:72px"></th></tr></thead><tbody>` +
+    rows.map(r => `<tr title="${esc(r.title)}">
+      <td class="num"><span class="bar" style="width:${r.kind == "" ? 0 : Math.max(1, r.size / max * 40)}px"></span>${bytes(r.size)}</td>
+      <td class="cmd">${r.name}</td>
+      <td class="dim">${r.kind === "dir" ? "" : r.kind}</td></tr>`).join("") + "</tbody></table>";
+}
+bindModal(diskModal);
+$("diskRescan").onclick = () => loadDiskUsage(true);
+$("diskTile").onclick = openDisk;
+$("diskTile").onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDisk(); } };
+
 function renderSystem(d) {
   const T = d.history.rows.map(r => r[0]);
   for (const kind of ["cpu", "mem"]) {
@@ -112,9 +167,9 @@ function renderSystem(d) {
   // The headline is the fullest disk; every disk gets a meter underneath.
   const disks = d.disks || [], pct = x => x.total ? x.used / x.total * 100 : 0;
   const full = disks.reduce((a, x) => !a || pct(x) > pct(a) ? x : a, null);
-  $("diskV").textContent = full ? pct(full).toFixed(0) + "%" : "–";
-  $("diskS").textContent = full ? `${bytes(full.total - full.used)} free on ${full.mount}` : "No disks found";
-  $("disks").innerHTML = disks.map(x => meterRow(x.mount, x.used, x.total, `${x.device} · ${x.fstype}`)).join("");
+  $("diskV").textContent = $("diskModalV").textContent = full ? pct(full).toFixed(0) + "%" : "–";
+  $("diskS").textContent = $("diskModalS").textContent = full ? `${bytes(full.total - full.used)} free on ${full.mount}` : "No disks found";
+  $("disks").innerHTML = $("diskModalMeters").innerHTML = disks.map(x => meterRow(x.mount, x.used, x.total, `${x.device} · ${x.fstype}`)).join("");
 
   $("ports").innerHTML = (d.ports && d.ports.length) ? `<table class="tbl">
     <thead><tr><th class="num" style="width:64px">Port</th><th>Process</th><th style="width:52px"></th></tr></thead><tbody>` +
