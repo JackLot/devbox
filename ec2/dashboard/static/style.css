@@ -154,6 +154,8 @@ header .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: w
 .runner-now .ttl { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .runner-now .d { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
 .runner-now .dim { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.runner-repos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; }
+.runner-repos .dim { margin-right: 2px; }
 .folds { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--grid); display: grid; gap: 4px; }
 .folds > * { min-width: 0; }
 .runner h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0; }
