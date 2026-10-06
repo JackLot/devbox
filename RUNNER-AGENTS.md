@@ -46,7 +46,8 @@ Read this before starting; add to it when you learn something a future run would
 - Bash tools (`ls`, `tail`, `stat`, ...) are refused on paths outside your worktree, e.g.
   `~/.agent-runner/`. The Read and Glob tools, and `python3 -c` scripts, can still read them.
 - `git -C <path> ...`, `cd <dir> && git ...` and `bash -n` are refused; run plain `git ...` from
-  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess;
+  the working directory. `gh` isn't allowed directly but works from a `python3 -c` subprocess
+  (`gh issue view` prints nothing there without `--json title,body,comments`);
   so does `git merge` (refused as plain Bash, as are `rebase` and `merge-tree`), e.g. to merge `main`
   into the branch when the reviewer says code changed since the PR was opened.
 - To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
