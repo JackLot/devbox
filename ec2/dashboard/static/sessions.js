@@ -12,6 +12,11 @@ function sessionChip(s, now) {
 
 const sessionTitle = s => s.title || (s.prompt ? s.prompt.slice(0, 120) : s.name || "session " + s.pid);
 
+// PRs the session opened, as "learn-git-app PR#51": a chat's PR can be in
+// another repo than the one it runs in.
+const sessionPrLink = pr => `<a href="${esc(pr.url)}" target="_blank" rel="noopener" title="${esc(pr.repo)}#${pr.number}">${esc(pr.repo.split("/")[1])} PR#${pr.number}</a>`;
+const sessionPrButton = pr => `<a class="btn primary" href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.repo.split("/")[1])} PR#${pr.number} ${EXT_ICON}</a>`;
+
 // A session row opens its live log. Closes the opening tag's class attribute.
 const logAttrs = s => s.session_id
   ? ` open-log" data-sid="${esc(s.session_id)}" role="button" tabindex="0" aria-haspopup="dialog" title="Watch this session's log"`
@@ -28,6 +33,7 @@ function openSessionLog(sid) {
   $("slog").innerHTML = "";
   $("slogNote").textContent = "Loading…";
   $("slogStop").dataset.html = $("slogStop").innerHTML = "";
+  $("slogPrs").dataset.html = $("slogPrs").innerHTML = "";
   slogHead();
   slogModal.showModal();
   fetchSessionLog();
@@ -43,6 +49,8 @@ function slogHead() {
   if ($("slogKicker").dataset.html !== html) { $("slogKicker").dataset.html = html; $("slogKicker").innerHTML = html; }
   const stop = s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + sessionTitle(s) + "”");
   if ($("slogStop").dataset.html !== stop) { $("slogStop").dataset.html = stop; $("slogStop").innerHTML = stop; }
+  const prs = (s.prs || []).map(sessionPrButton).join("");
+  if ($("slogPrs").dataset.html !== prs) { $("slogPrs").dataset.html = prs; $("slogPrs").innerHTML = prs; }
 }
 bindModal(slogModal, () => { if (slog) clearInterval(slog.timer); slog = null; });
 
@@ -140,6 +148,7 @@ function renderClaude(d) {
         <div class="ttl" title="${esc(title)}">${esc(title)}</div>
         <div class="d" title="${esc(detail)}"><b>${esc(status)}</b>${detail ? " · " + esc(detail) : ""}</div>
       </div>
+      ${s.prs && s.prs.length ? `<span class="side">${s.prs.map(sessionPrLink).join(" ")}</span>` : ""}
       <span class="where" title="${esc(s.cwd + (s.branch ? "\nBranch " + s.branch : "") + "\npid " + s.pid)}">${esc(where)}</span>
       <span class="age">${s.status_since ? dur(now - s.status_since) : ""}</span>
       ${s.status === "stopped" ? "" : stopButton(s.pid, s.start, last.host.user, "Claude session “" + title + "”")}

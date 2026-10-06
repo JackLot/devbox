@@ -265,6 +265,7 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 .m-body .log { height: auto; max-height: 280px; }
 .m-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--grid); }
 .m-foot .note { flex: 1; margin: 0; }
+#slogPrs { display: contents; }
 .log {
   margin: 0; height: 240px; overflow: auto; padding: 10px 12px; border-radius: 8px;
   background: var(--page); border: 1px solid var(--border);

@@ -532,6 +532,52 @@ def first_prompt(path):
     return found
 
 
+# PRs a chat opened: the URL `gh pr create` prints (also when run from a
+# python subprocess, as ['gh', 'pr', 'create', ...]) or a GitHub MCP tool
+# returns. The whole transcript is scanned, not just the tail the summary
+# reads, since the PR is often opened long before the session goes quiet;
+# each call only reads what was appended since the last one.
+PR_CREATE = re.compile(r"""\bpr['",\s]+create\b""")
+PR_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
+_session_prs = {}  # path -> {"offset", "calls", "prs"}
+
+
+def session_prs(path):
+    size = os.path.getsize(path)
+    st = _session_prs.get(path)
+    if not st or size < st["offset"]:
+        st = _session_prs[path] = {"offset": 0, "calls": set(), "prs": []}
+    if size == st["offset"]:
+        return st["prs"]
+    with open(path, "rb") as f:
+        f.seek(st["offset"])
+        data = f.read()
+    end = data.rfind(b"\n") + 1  # a partly written last line waits for the next call
+    st["offset"] += end
+    for raw in data[:end].split(b"\n"):
+        if b"create" not in raw and b"/pull/" not in raw:
+            continue
+        d = safe(json.loads, raw)
+        if not isinstance(d, dict) or d.get("isSidechain"):
+            continue
+        content = (d.get("message") or {}).get("content")
+        for b in content if isinstance(content, list) else []:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                inp = b.get("input") or {}
+                cmd = inp.get("command") if isinstance(inp.get("command"), str) else ""
+                if PR_CREATE.search(cmd) or "create_pull_request" in (b.get("name") or ""):
+                    st["calls"].add(b.get("id"))
+            elif b.get("type") == "tool_result" and b.get("tool_use_id") in st["calls"]:
+                st["calls"].discard(b.get("tool_use_id"))
+                for m in PR_URL.finditer(_result_text(b.get("content"))):
+                    pr = {"repo": m.group(1), "number": int(m.group(2)), "url": m.group(0)}
+                    if pr not in st["prs"]:
+                        st["prs"].append(pr)
+    return st["prs"]
+
+
 def find_transcript(session_id):
     for proj in safe(os.listdir, os.path.join(CLAUDE_DIR, "projects")) or []:
         path = os.path.join(CLAUDE_DIR, "projects", proj, session_id + ".jsonl")
@@ -688,6 +734,7 @@ def claude_sessions(procs, rows):
             "recap": summary.get("recap"),
             "recap_time": summary.get("recap_time"),
             "last_activity": summary.get("last_activity"),
+            "prs": (safe(session_prs, transcript) if transcript else None) or [],
             "cpu": row.get("cpu"),
             "rss": row.get("rss"),
             "start": row.get("start"),
