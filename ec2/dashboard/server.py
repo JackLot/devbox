@@ -1043,6 +1043,7 @@ def agent_runner(sessions, github):
         "last_log_line": last_tick,
         "runs": runs,
         "issues": open_issues(conf, github, worktrees, last_run),
+        "repos": [{"name": n, "slug": s} for n, s in sorted(conf["repos"].items())],
         "worktrees": len(worktrees),
         "github": github and {"time": github["time"], "error": github["error"]},
         "log": {"path": cron_log, "available": lines is not None, "lines": lines or []},

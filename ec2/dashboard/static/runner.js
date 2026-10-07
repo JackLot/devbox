@@ -84,6 +84,15 @@ function renderIssues(r, now) {
   renderIssueModal(now);
 }
 
+// The repos the runner watches, each a link to file a new issue on GitHub
+function renderRepos(r) {
+  const repos = r.repos || [];
+  $("runnerRepos").hidden = !repos.length;
+  const html = repos.length ? '<span class="dim">New issue in</span>' + repos.map(x =>
+    `<a class="btn small" href="https://github.com/${esc(x.slug)}/issues/new" target="_blank" rel="noopener" title="${esc("Create an issue in " + x.slug)}">${esc(x.name)} ${EXT_ICON}</a>`).join("") : "";
+  if ($("runnerRepos").dataset.html !== html) { $("runnerRepos").dataset.html = html; $("runnerRepos").innerHTML = html; }
+}
+
 // Issue details: click an issue's title (or its row on phones).
 const issueKey = x => `${x.repo}#${x.issue}`;
 const issueModal = $("issueModal");
@@ -250,6 +259,7 @@ function renderRunner(d) {
 
   renderIssues(r, now);
   renderStart(r);
+  renderRepos(r);
 
   // Widths sit on the header cells, not a <colgroup>, so the "wide" columns
   // can be hidden on narrow screens without shifting the others.
