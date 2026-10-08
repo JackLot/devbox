@@ -1,22 +1,29 @@
 // New issue: the button in the Issues card (or N anywhere on the page) opens a
-// form that files an issue labeled agent in one of the runner's repos. One
-// text box: the first line is the title, the rest the body.
+// form that files an issue labeled agent in one of the runner's repos.
 
 const newIssueModal = $("newIssueModal");
 bindModal(newIssueModal);
-const NOTE = $("newIssueNote").textContent;
+if (/Mac|iPhone|iPad/.test(navigator.platform)) $("newIssueKey").textContent = "⌘ ↵";
+
+let newIssueRepo = localStorage.getItem("newIssueRepo");
+
+function pickRepo(name) {
+  newIssueRepo = name;
+  for (const b of $("newIssueRepo").children) b.setAttribute("aria-checked", b.dataset.repo === name);
+}
 
 function openNewIssue() {
   const repos = (last && last.runner && last.runner.repos) || [];
   if (!repos.length || newIssueModal.open) return;
-  const pick = $("newIssueRepo").value || localStorage.getItem("newIssueRepo");
-  $("newIssueRepo").innerHTML = repos.map(x => `<option value="${esc(x.name)}">${esc(x.name)} (${esc(x.slug)})</option>`).join("");
-  if (repos.some(x => x.name === pick)) $("newIssueRepo").value = pick;
-  $("newIssueNote").textContent = NOTE;
+  $("newIssueRepo").innerHTML = repos.map(x =>
+    `<button class="btn small" type="button" role="radio" data-repo="${esc(x.name)}" title="${esc(x.slug)}">${esc(x.name)}</button>`).join("");
+  pickRepo(repos.some(x => x.name === newIssueRepo) ? newIssueRepo : repos[0].name);
+  $("newIssueNote").hidden = true;
   newIssueModal.showModal();
-  $("newIssueText").focus();
+  $("newIssueName").focus();
 }
 $("newIssueBtn").onclick = openNewIssue;
+$("newIssueRepo").onclick = e => { const b = e.target.closest("[data-repo]"); if (b) pickRepo(b.dataset.repo); };
 
 document.addEventListener("keydown", e => {
   if ((e.key !== "n" && e.key !== "N") || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
@@ -24,27 +31,27 @@ document.addEventListener("keydown", e => {
   e.preventDefault();
   openNewIssue();
 });
-$("newIssueText").addEventListener("keydown", e => {
+$("newIssueForm").addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("newIssueForm").requestSubmit(); }
 });
 
 $("newIssueForm").addEventListener("submit", async e => {
   e.preventDefault();
-  const [title, ...rest] = $("newIssueText").value.trim().split("\n");
-  const repo = $("newIssueRepo").value, btn = $("newIssueSubmit");
+  const repo = newIssueRepo, btn = $("newIssueSubmit"), label = btn.innerHTML;
   btn.disabled = true; btn.textContent = "Creating…";
   try {
     const r = await fetch("api/issue", {
       method: "POST", headers: { "Content-Type": "application/json", "X-Dashboard": "1" },
-      body: JSON.stringify({ repo, title: title.trim(), body: rest.join("\n") }),
+      body: JSON.stringify({ repo, title: $("newIssueName").value.trim(), body: $("newIssueText").value }),
     });
     const res = await r.json().catch(() => ({ message: "HTTP " + r.status }));
     if (!r.ok) throw new Error(res.message);
     localStorage.setItem("newIssueRepo", repo);
-    $("newIssueText").value = "";
+    $("newIssueName").value = $("newIssueText").value = "";
     newIssueModal.close();
   } catch (err) {
     $("newIssueNote").textContent = "Couldn't create the issue: " + err.message;
+    $("newIssueNote").hidden = false;
   }
-  btn.disabled = false; btn.textContent = "Create issue";
+  btn.disabled = false; btn.innerHTML = label;
 });

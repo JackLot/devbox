@@ -32,7 +32,7 @@
       <h2>Issues<span class="info" tabindex="0" aria-describedby="runnerTip"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="5.6"/><path d="M7 6.4v3.4M7 4.2v.1"/></svg><span class="tip" id="runnerTip" role="tooltip">Monitors the automatic coding agent runner and tracks the GitHub issues a runner agent will action.</span></span><span class="counts" id="runnerCounts"></span></h2>
       <span class="runner-next" id="runnerNext"></span>
       <span id="runnerStart" hidden></span>
-      <button class="btn small" id="newIssueBtn" type="button" aria-haspopup="dialog" title="New issue for the runner (N)" hidden>New issue</button>
+      <button class="btn small primary" id="newIssueBtn" type="button" aria-haspopup="dialog" aria-keyshortcuts="N" title="New issue for the runner" hidden>New issue <kbd>N</kbd></button>
     </div>
     <div class="runner-now" id="runnerNow" hidden></div>
     <div id="runnerIssues"></div>
@@ -176,13 +176,13 @@
       <button class="m-close" type="button" aria-label="Close"></button>
     </header>
     <div class="m-body">
-      <label class="field"><h3>Repo</h3><select id="newIssueRepo"></select></label>
-      <label class="field"><h3>Issue</h3><textarea id="newIssueText" rows="10" required
-        placeholder="Title on the first line&#10;&#10;Then the description"></textarea></label>
+      <div class="field"><h3 id="newIssueRepoLabel">Repo</h3><div class="btn-group" id="newIssueRepo" role="radiogroup" aria-labelledby="newIssueRepoLabel"></div></div>
+      <label class="field"><h3>Title</h3><input id="newIssueName" type="text" required autocomplete="off"></label>
+      <label class="field"><h3>Description</h3><textarea id="newIssueText" rows="10"></textarea></label>
     </div>
     <footer class="m-foot">
-      <span class="note" id="newIssueNote">First line is the title. Ctrl/⌘+Enter creates it.</span>
-      <button class="btn primary" id="newIssueSubmit" type="submit">Create issue</button>
+      <span class="note" id="newIssueNote" hidden></span>
+      <button class="btn primary" id="newIssueSubmit" type="submit" aria-keyshortcuts="Control+Enter Meta+Enter">Create issue <kbd id="newIssueKey">Ctrl ↵</kbd></button>
     </footer>
   </form>
 </dialog>
