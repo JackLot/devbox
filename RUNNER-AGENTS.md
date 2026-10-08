@@ -52,7 +52,10 @@ Read this before starting; add to it when you learn something a future run would
   so does `git merge` (refused as plain Bash, as are `rebase` and `merge-tree`), e.g. to merge `main`
   into the branch when the reviewer says code changed since the PR was opened.
 - To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
-  port 0 in a thread inside `python3 -c` and call it with `urllib`.
+  port 0 in a thread inside `python3 -c` and call it with `urllib`. POSTs need `X-Dashboard: 1`
+  and an `Origin` matching the Host. For endpoints that shell out to `gh` (e.g. `/api/issue`),
+  replace `server.runner_conf` with a lambda whose `path` puts a fake `gh` script first, so
+  nothing reaches GitHub.
 - When the reviewer says they made tweaks "in the worktree", they're usually uncommitted,
   and the runner's `git reset --hard` wiped them before you started. Cursor keeps local
   history: find the `~/.cursor-server/data/User/History/*/entries.json` whose `resource`
