@@ -87,7 +87,7 @@ function renderIssues(r, now) {
 // The repos the runner watches, each a link to file a new issue on GitHub
 function renderRepos(r) {
   const repos = r.repos || [];
-  $("runnerRepos").hidden = !repos.length;
+  $("runnerRepos").hidden = $("newIssueBtn").hidden = !repos.length;
   const html = repos.length ? '<span class="dim">New issue in</span>' + repos.map(x =>
     `<a class="btn small" href="https://github.com/${esc(x.slug)}/issues/new" target="_blank" rel="noopener" title="${esc("Create an issue in " + x.slug)}">${esc(x.name)} ${EXT_ICON}</a>`).join("") : "";
   if ($("runnerRepos").dataset.html !== html) { $("runnerRepos").dataset.html = html; $("runnerRepos").innerHTML = html; }

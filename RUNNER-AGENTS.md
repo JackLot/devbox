@@ -39,6 +39,10 @@ Read this before starting; add to it when you learn something a future run would
   CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The reviewer notices tight vertical spacing between dashboard blocks (issue #51: repo links
   10px under the issue list was "needs padding"); leave ~20px between separate groups.
+- Dashboard UI preferences from PR #56: show a keyboard shortcut as a `<kbd>` inside the
+  button it triggers (not as hint text elsewhere); prefer a button group over a `<select>`
+  for a short list of choices; autofocus the first field when a form modal opens. They want
+  forms usable keyboard-only (repo buttons got Alt+1..9, shown in each button's `<kbd>`).
 - The reviewer's phone is iOS Safari. In a column flexbox without a set height (the modals),
   `flex: 1` there collapses the item to zero; use `flex: 1 1 auto` (issue #46).
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
@@ -52,7 +56,10 @@ Read this before starting; add to it when you learn something a future run would
   so does `git merge` (refused as plain Bash, as are `rebase` and `merge-tree`), e.g. to merge `main`
   into the branch when the reviewer says code changed since the PR was opened.
 - To test the dashboard's HTTP endpoints, start `ThreadingHTTPServer` with `server.Handler` on
-  port 0 in a thread inside `python3 -c` and call it with `urllib`.
+  port 0 in a thread inside `python3 -c` and call it with `urllib`. POSTs need `X-Dashboard: 1`
+  and an `Origin` matching the Host. For endpoints that shell out to `gh` (e.g. `/api/issue`),
+  replace `server.runner_conf` with a lambda whose `path` puts a fake `gh` script first, so
+  nothing reaches GitHub.
 - When the reviewer says they made tweaks "in the worktree", they're usually uncommitted,
   and the runner's `git reset --hard` wiped them before you started. Cursor keeps local
   history: find the `~/.cursor-server/data/User/History/*/entries.json` whose `resource`
