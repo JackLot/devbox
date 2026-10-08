@@ -297,6 +297,8 @@ html:has(dialog.modal[open]) { overflow: hidden; }
 .coderow { display: flex; align-items: center; gap: 10px; padding: 7px 7px 7px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); }
 .coderow code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); }
 .coderow .btn { flex: none; }
+/* Cursor only runs on a desktop, so phones and tablets don't get the button */
+@media (hover: none) { .cursor-open { display: none; } }
 /* rendered Markdown (run summaries) and other running text */
 .prose { font-size: 13.5px; line-height: 1.6; }
 .prose p, .prose ul, .prose ol, .prose pre, .prose .scroll { margin: 0 0 10px; }

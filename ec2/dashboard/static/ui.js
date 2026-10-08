@@ -27,8 +27,9 @@ const foldSection = (title, html, attrs = "") =>
   `<details class="fold"${attrs}><summary><h3>${CHEVRON}${esc(title)}</h3></summary>${html}</details>`;
 
 // A command or path in a box with a Copy button; `shown` is trusted markup.
-const codeRow = (copy, shown, title) =>
-  `<div class="coderow"><code>${shown}</code><button type="button" class="btn small" data-copy="${esc(copy)}" title="${esc(title || "Copy")}">Copy</button></div>`;
+// `extra` is more buttons, after Copy.
+const codeRow = (copy, shown, title, extra = "") =>
+  `<div class="coderow"><code>${shown}</code><button type="button" class="btn small" data-copy="${esc(copy)}" title="${esc(title || "Copy")}">Copy</button>${extra}</div>`;
 
 // Minimal Markdown for what agents write: run summaries (they become PR
 // descriptions) and the replies in a session's log. Everything is escaped

@@ -93,6 +93,11 @@ function renderRepos(r) {
   if ($("runnerRepos").dataset.html !== html) { $("runnerRepos").dataset.html = html; $("runnerRepos").innerHTML = html; }
 }
 
+// Opens a folder on this box in the laptop's Cursor, over Remote-SSH. SSH_HOST
+// is the `Host` alias from ec2/laptop/ssh_config, so a hibernated box wakes too.
+const SSH_HOST = "devbox";
+const cursorUrl = path => `cursor://vscode-remote/ssh-remote+${SSH_HOST}${encodeURI(path)}`;
+
 // Issue details: click an issue's title (or its row on phones).
 const issueKey = x => `${x.repo}#${x.issue}`;
 const issueModal = $("issueModal");
@@ -122,7 +127,8 @@ function renderIssueModal(now) {
     wt && wt.activity && ["Last commit", dur(now - wt.activity) + " ago"],
     x.updated && ["Issue updated", clock(Date.parse(x.updated) / 1000)],
   ])}</dl>`;
-  const where = wt ? `<div><h3>Worktree</h3>${codeRow("cd " + wt.path, esc(home(wt.path)), "Copy: cd " + wt.path)}` +
+  const cursor = wt ? `<a class="btn small cursor-open" href="${esc(cursorUrl(wt.path))}" title="${esc(`Open ${home(wt.path)} in Cursor over SSH (Host ${SSH_HOST})`)}">Open in Cursor ${EXT_ICON}</a>` : "";
+  const where = wt ? `<div><h3>Worktree</h3>${codeRow("cd " + wt.path, esc(home(wt.path)), "Copy: cd " + wt.path, cursor)}` +
     (wt.branch ? `<div class="branch">${BRANCH_ICON}<span>${esc(wt.branch)}</span></div>` : "") + "</div>" : "";
   const prompt = handoffPrompt(x);
   // The Copy button sits over the prompt's bottom right corner
