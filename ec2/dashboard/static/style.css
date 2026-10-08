@@ -379,7 +379,7 @@ dialog.slog-modal { height: min(860px, calc(100vh - 32px)); }
 .btn-group .btn[aria-checked="true"] { background: var(--s1); border-color: transparent; color: #fff; }
 /* keyboard shortcut hint inside a button */
 .btn kbd {
-  padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.2);
+  padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, currentColor 18%, transparent);
   font: 600 11px/16px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .branch { display: flex; align-items: center; gap: 5px; margin: 8px 0 0 12px; color: var(--ink-2); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }

@@ -3,7 +3,8 @@
 
 const newIssueModal = $("newIssueModal");
 bindModal(newIssueModal);
-if (/Mac|iPhone|iPad/.test(navigator.platform)) $("newIssueKey").textContent = "⌘ ↵";
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+if (isMac) $("newIssueKey").textContent = "⌘ ↵";
 
 let newIssueRepo = localStorage.getItem("newIssueRepo");
 
@@ -15,8 +16,10 @@ function pickRepo(name) {
 function openNewIssue() {
   const repos = (last && last.runner && last.runner.repos) || [];
   if (!repos.length || newIssueModal.open) return;
-  $("newIssueRepo").innerHTML = repos.map(x =>
-    `<button class="btn small" type="button" role="radio" data-repo="${esc(x.name)}" title="${esc(x.slug)}">${esc(x.name)}</button>`).join("");
+  // Alt+1..9 picks a repo even while typing in the title; plain digits work off the text fields.
+  $("newIssueRepo").innerHTML = repos.map((x, i) =>
+    `<button class="btn small" type="button" role="radio" data-repo="${esc(x.name)}" title="${esc(x.slug)}">${esc(x.name)}` +
+    (i < 9 ? ` <kbd>${isMac ? "⌥" : "Alt "}${i + 1}</kbd>` : "") + `</button>`).join("");
   pickRepo(repos.some(x => x.name === newIssueRepo) ? newIssueRepo : repos[0].name);
   $("newIssueNote").hidden = true;
   newIssueModal.showModal();
@@ -32,7 +35,12 @@ document.addEventListener("keydown", e => {
   openNewIssue();
 });
 $("newIssueForm").addEventListener("keydown", e => {
-  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("newIssueForm").requestSubmit(); }
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("newIssueForm").requestSubmit(); return; }
+  // e.code, since Option+digit on a Mac types a symbol (¡ ™ £ …) into e.key
+  const d = /^Digit([1-9])$/.exec(e.code);
+  if (!d || e.ctrlKey || e.metaKey || (!e.altKey && e.target.closest("input, textarea"))) return;
+  const b = $("newIssueRepo").children[d[1] - 1];
+  if (b) { e.preventDefault(); pickRepo(b.dataset.repo); }
 });
 
 $("newIssueForm").addEventListener("submit", async e => {
