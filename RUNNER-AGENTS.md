@@ -39,6 +39,9 @@ Read this before starting; add to it when you learn something a future run would
   CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
 - The reviewer notices tight vertical spacing between dashboard blocks (issue #51: repo links
   10px under the issue list was "needs padding"); leave ~20px between separate groups.
+- Dashboard UI preferences from PR #56: show a keyboard shortcut as a `<kbd>` inside the
+  button it triggers (not as hint text elsewhere); prefer a button group over a `<select>`
+  for a short list of choices; autofocus the first field when a form modal opens.
 - The reviewer's phone is iOS Safari. In a column flexbox without a set height (the modals),
   `flex: 1` there collapses the item to zero; use `flex: 1 1 auto` (issue #46).
 - The dashboard is plain http over Tailscale, so `navigator.clipboard` is undefined there;
