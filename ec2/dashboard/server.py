@@ -845,6 +845,24 @@ def github_state(conf):
     return out
 
 
+def create_issue(conf, repo, title, body):
+    """Files an issue labeled agent, so the runner's next tick picks it up."""
+    slug = conf["repos"].get(repo)
+    if not slug:
+        return 400, "not a repo the runner watches: %r" % repo
+    env = dict(os.environ, PATH=conf["path"] or os.environ.get("PATH", ""))
+    try:
+        r = subprocess.run(["gh", "issue", "create", "-R", slug, "--title", title, "--body", body,
+                            "--label", "agent"], capture_output=True, text=True, timeout=30, env=env)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 500, "gh failed: %s" % e
+    if r.returncode:
+        return 500, "gh issue create failed: " + (r.stderr or r.stdout).strip()[-300:]
+    url = (r.stdout.strip().splitlines() or [""])[-1]  # gh prints the new issue's URL last
+    print("created %s via dashboard" % url, flush=True)
+    return 200, url
+
+
 def pr_trigger(slug, pr, seen):
     """Why the runner's next tick will pick this PR's issue up, if it will: the
     trigger label on the PR or a code review no run has been given yet (the same
@@ -1121,6 +1139,7 @@ class Sampler:
         self.snapshot = {}
         self.instance = None
         self.github = None
+        self.github_now = threading.Event()  # set to refresh from GitHub before the minute is up
         self._prev = None
 
     def start(self):
@@ -1136,7 +1155,8 @@ class Sampler:
             if os.path.isdir(RUNNER_HOME):
                 self.github = safe(github_state, runner_conf()) or self.github
                 self.resample_soon()
-            time.sleep(GH_REFRESH)
+            self.github_now.wait(GH_REFRESH)
+            self.github_now.clear()
 
     def _loop(self):
         while True:
@@ -1435,16 +1455,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/stop", "/api/hibernate", "/api/idle-pause"):
+        if path not in ("/api/stop", "/api/hibernate", "/api/idle-pause", "/api/issue"):
             return self.send(404, b"not found\n", "text/plain")
         refused = self.refuse_foreign()
         if refused:
             return self.reply(403, refused)
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            body = json.loads(self.rfile.read(min(length, 4096)) or b"{}")
+            # An issue's body can run long; everything else is a few fields
+            body = json.loads(self.rfile.read(min(length, 65536 if path == "/api/issue" else 4096)) or b"{}")
         except ValueError:
             return self.reply(400, "expected a JSON body")
+        if path == "/api/issue":
+            title, text = body.get("title"), body.get("body", "")
+            if not (isinstance(title, str) and title.strip() and isinstance(text, str)):
+                return self.reply(400, "expected JSON {repo, title, body}")
+            code, message = create_issue(runner_conf(), body.get("repo"), title.strip(), text.strip())
+            if code == 200:
+                self.sampler.github_now.set()  # so the new issue shows up within seconds
+            return self.reply(code, message)
         if path == "/api/hibernate":
             return self.reply(*hibernate(self.sampler.instance, dry_run=body.get("dry_run") is True))
         if path == "/api/idle-pause":
