@@ -12,6 +12,7 @@ Read this before starting; add to it when you learn something a future run would
   simple_expansion"), even inside a quoted heredoc. That bites dashboard JS edits, where the code
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
   `sed -i` chained with `&&` is refused too ("requires approval"); edit docs with the Edit tool.
+  Pipes like `gzip -c f | wc -c` are refused as "multiple operations"; do it in `python3 -c`.
 - The dashboard is `index.html` (markup only) plus `static/style.css` and `static/*.js`: classic
   scripts sharing globals, loaded in the order `index.html` lists them. The reviewer asked for
   this split (issue #4); don't fold it back into one file. A new file there needs a `<script>`
