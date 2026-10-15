@@ -1,13 +1,24 @@
 # Devbox launch checklist
 
-Work top to bottom. Laptop commands run from the repo root (`~/dev/devbox`).
+This checklist takes you from a fresh AWS account to a hardened, verified devbox. When you
+finish, `ssh devbox` wakes the box and logs you in, nothing on the internet can connect to it,
+and it hibernates itself when idle.
+
+Work top to bottom: later sections use resources and shell variables from earlier ones. Each
+section ends with checks that confirm it worked; don't move on until they pass.
+
+**You need:** a Mac, an AWS account you can sign in to as root, a Tailscale account (signing in
+to the app in section 1 creates one), and this repo cloned to `~/dev/devbox`. Run laptop commands
+from that directory.
+
 Each command block says where it runs:
 
 - **laptop**: your Mac terminal
 - **ssm**: admin shell on the box, opened with `aws ssm start-session --target "$INSTANCE_ID"` (later: `devbox ssm`)
 - **devbox**: `ssh devbox`, as the unprivileged `dev` user
 
-Shell variables used throughout (laptop):
+Set these in the laptop terminal you use for the checklist, and set them again if you open a new
+one:
 
 ```bash
 export AWS_REGION=us-east-1          # pick your region
@@ -17,7 +28,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 ---
 
-## 1. Laptop prerequisites (MacOS)
+## 1. Laptop prerequisites (macOS)
 
 - [ ] AWS CLI v2: `brew install awscli`
 - [ ] Session Manager plugin: `brew install --cask session-manager-plugin`
@@ -206,6 +217,13 @@ AMI_ID=$(aws ssm get-parameter \
 echo "$AMI_ID"
 ```
 
+EC2 caps user-data at 16,384 bytes, and `bootstrap.sh` is over that. Compress it; cloud-init
+unpacks gzipped user-data on its own (laptop):
+```bash
+gzip -9c ec2/bootstrap.sh > /tmp/devbox-bootstrap.sh.gz
+wc -c < /tmp/devbox-bootstrap.sh.gz      # must be under 16384; about 6600 today
+```
+
 ### Option A: console
 
 Console, signed in through the access portal as AdministratorAccess, region **US East (N. Virginia) us-east-1** (top right). EC2 > Instances > **Launch instances**. Only the fields listed here change; leave everything else at its default.
@@ -230,7 +248,7 @@ Console, signed in through the access portal as AdministratorAccess, region **US
   - Metadata version: **V2 only (token required)**
   - Metadata response hop limit: **1**
   - Allow tags in metadata: **Enable**
-  - User data: **Choose file** > `ec2/bootstrap.sh`. Leave "User data has already been base64 encoded" unticked.
+  - User data: the text box can't take the binary gzip file, so paste it base64-encoded. Run `base64 -i /tmp/devbox-bootstrap.sh.gz | pbcopy` on the laptop, paste into the box, and tick **User data has already been base64 encoded**.
 - [ ] **Summary** panel: 1 instance, then **Launch instance**.
 - [ ] Copy the instance id (`i-...`) from the success banner, then in your terminal:
   ```bash
@@ -253,7 +271,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --credit-specification CpuCredits=unlimited \
   --block-device-mappings 'DeviceName=/dev/xvda,Ebs={VolumeSize=40,VolumeType=gp3,Encrypted=true,DeleteOnTermination=true}' \
   --disable-api-termination \
-  --user-data file://ec2/bootstrap.sh \
+  --user-data fileb:///tmp/devbox-bootstrap.sh.gz \
   --tag-specifications \
     'ResourceType=instance,Tags=[{Key=Name,Value=devbox}]' \
     'ResourceType=volume,Tags=[{Key=Name,Value=devbox}]' \
