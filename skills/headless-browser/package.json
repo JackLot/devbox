@@ -1,0 +1,12 @@
+{
+  "name": "headless-browser",
+  "private": true,
+  "type": "module",
+  "description": "Pinned Playwright and headless Chromium for the headless-browser Claude Code skill",
+  "scripts": {
+    "postinstall": "playwright install --only-shell chromium"
+  },
+  "dependencies": {
+    "playwright": "1.64.1"
+  }
+}
