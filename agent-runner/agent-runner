@@ -41,8 +41,9 @@ MAX_TURNS=200
 
 # Tools the agent may use without prompting. It can edit files and run the project's
 # tooling, but pushing and PR creation are done by this script, not the agent.
+# Skill lets it load user-level skills, such as headless-browser from ../skills/.
 ALLOWED_TOOLS=(
-  Read Edit Write Glob Grep TodoWrite
+  Read Edit Write Glob Grep TodoWrite Skill
   "Bash(npm *)" "Bash(npx *)" "Bash(node *)" "Bash(pnpm *)"
   "Bash(python *)" "Bash(python3 *)" "Bash(pip *)" "Bash(uv *)" "Bash(pytest *)"
   "Bash(ls *)" "Bash(cat *)" "Bash(head *)" "Bash(tail *)" "Bash(wc *)"
@@ -321,6 +322,8 @@ Instructions:
 - Implement the change the issue asks for. Keep the change focused on the issue.
 - If dependencies aren't installed (e.g. no node_modules), install them first.
 - Run the relevant tests/build and fix failures you introduced.
+- For UI changes, check the result in a headless browser (headless-browser skill) at desktop and
+  mobile widths before finishing, and say what you saw under "Agent-run verification".
 - Commit your work on the current branch with clear messages. Do not push; do not switch branches.
 - Never add Co-Authored-By trailers, "Generated with Claude Code" notes, or any other AI/Claude
   attribution to commits, code, docs or your summary.

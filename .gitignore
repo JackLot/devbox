@@ -8,3 +8,6 @@ conf.d/
 
 # Python bytecode
 __pycache__/
+
+# Dependencies installed by skills/install.sh
+skills/*/node_modules/

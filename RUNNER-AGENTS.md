@@ -5,9 +5,9 @@ Read this before starting; add to it when you learn something a future run would
 
 ## Environment limits
 
-- You can't leave processes running after you exit: `nohup`, `setsid` and backgrounding are
-  refused, and so is `curl`. You can start a server in the foreground briefly to check that it
-  boots, but you can't keep it up or fetch its pages.
+- To keep a dev server up while you test, start it with the Bash tool's `run_in_background`
+  option and stop it (TaskStop) before you finish. `nohup`, `setsid`, `&` and `curl` are refused;
+  probe the server with `node -e "fetch(...)"` instead.
 - Bash commands containing a shell expansion (`$(...)`, `$VAR`) are refused ("Contains
   simple_expansion"), even inside a quoted heredoc. That bites dashboard JS edits, where the code
   uses `$("id")`: make those edits with the Edit tool, not a Python/sed script run through Bash.
@@ -36,8 +36,8 @@ Read this before starting; add to it when you learn something a future run would
 - For large rewrites of a dashboard file (a whole section of `style.css`, say), Write the new
   block to `/tmp` and splice it in with a small Python script that is also written with the
   Write tool and run as `python3 /tmp/x.py`; then Read the file again before using Edit.
-- There's no headless browser (no chromium/chrome on PATH), so layout changes (e.g. mobile
-  CSS) can't be screenshotted here; say in the summary which widths the reviewer should check.
+- To screenshot pages or click through the dashboard, use the headless-browser skill (no
+  chromium/chrome on PATH; the skill brings its own). Read the screenshots before reporting.
 - The reviewer notices tight vertical spacing between dashboard blocks (issue #51: repo links
   10px under the issue list was "needs padding"); leave ~20px between separate groups.
 - Dashboard UI preferences from PR #56: show a keyboard shortcut as a `<kbd>` inside the
